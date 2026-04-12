@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Drivers ──────────────────────────────────────────────
+    match /drivers/{driverId} {
+      allow read, write: if true;
+
+      // ─── Trips (sub-collection) ─────────────────────────────
+      match /trips/{tripId} {
+        allow read, write: if true;
+      }
+
+      // ─── Alerts (sub-collection) ────────────────────────────
+      match /alerts/{alertId} {
+        allow read, write: if true;
+      }
+    }
+
+    // ─── Emergencies ──────────────────────────────────────────
+    match /emergencies/{emergencyId} {
+      allow read, write: if true;
+    }
+  }
+}

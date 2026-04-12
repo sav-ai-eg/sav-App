@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "369762161318",
+    "project_id": "seen-12492",
+    "storage_bucket": "seen-12492.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:369762161318:android:84336a46cc1de626d9da67",
+        "android_client_info": {
+          "package_name": "com.example.sav"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHcThXTLiNR-bFcuPBL4nrfMbpCKNyt00"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
