@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/api_response.dart';
+import 'package:sav/core/network/interceptors/auth_token_interceptor.dart';
 
 class DioApiConsumer implements ApiConsumer {
-  DioApiConsumer(this._dio) {
+  DioApiConsumer(this._dio, this._prefs) {
     _dio.options = _dio.options.copyWith(
       baseUrl: AppConstants.apiBaseUrl,
       connectTimeout: const Duration(seconds: 20),
@@ -16,9 +18,30 @@ class DioApiConsumer implements ApiConsumer {
       headers: _jsonHeaders,
       validateStatus: (int? status) => status != null && status < 500,
     );
+
+    _refreshDio.options = _refreshDio.options.copyWith(
+      baseUrl: AppConstants.apiBaseUrl,
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      headers: _jsonHeaders,
+      validateStatus: (int? status) => status != null && status < 500,
+    );
+
+    if (_dio.interceptors.whereType<AuthTokenInterceptor>().isEmpty) {
+      _dio.interceptors.add(
+        AuthTokenInterceptor(
+          requestDio: _dio,
+          refreshDio: _refreshDio,
+          prefs: _prefs,
+        ),
+      );
+    }
   }
 
   final Dio _dio;
+  final Dio _refreshDio = Dio();
+  final SharedPreferences _prefs;
 
   static const Map<String, String> _jsonHeaders = <String, String>{
     'Content-Type': 'application/json',
@@ -30,12 +53,18 @@ class DioApiConsumer implements ApiConsumer {
     String path, {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   }) async {
     try {
       final response = await _dio.get<dynamic>(
         path,
         queryParameters: queryParameters,
-        options: Options(headers: _mergeHeaders(headers)),
+        options: Options(
+          headers: _mergeHeaders(headers),
+          extra: <String, dynamic>{
+            AuthRequestOptionsKeys.requiresAuth: requiresAuth,
+          },
+        ),
       );
 
       return _mapResponse(response);
@@ -50,13 +79,19 @@ class DioApiConsumer implements ApiConsumer {
     dynamic body,
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   }) async {
     try {
       final response = await _dio.post<dynamic>(
         path,
         data: body,
         queryParameters: queryParameters,
-        options: Options(headers: _mergeHeaders(headers)),
+        options: Options(
+          headers: _mergeHeaders(headers),
+          extra: <String, dynamic>{
+            AuthRequestOptionsKeys.requiresAuth: requiresAuth,
+          },
+        ),
       );
 
       return _mapResponse(response);
@@ -71,13 +106,19 @@ class DioApiConsumer implements ApiConsumer {
     dynamic body,
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   }) async {
     try {
       final response = await _dio.delete<dynamic>(
         path,
         data: body,
         queryParameters: queryParameters,
-        options: Options(headers: _mergeHeaders(headers)),
+        options: Options(
+          headers: _mergeHeaders(headers),
+          extra: <String, dynamic>{
+            AuthRequestOptionsKeys.requiresAuth: requiresAuth,
+          },
+        ),
       );
 
       return _mapResponse(response);

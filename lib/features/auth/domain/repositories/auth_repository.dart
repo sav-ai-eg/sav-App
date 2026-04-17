@@ -7,4 +7,10 @@ abstract class AuthRepository {
   Future<Either<Failure, AuthSessionEntity>> login({
     required LoginParams params,
   });
+
+  Future<Either<Failure, Unit>> saveSession({required AuthSessionEntity session});
+
+  Future<Either<Failure, Unit>> clearSession();
+
+  Future<Either<Failure, Unit>> logout();
 }

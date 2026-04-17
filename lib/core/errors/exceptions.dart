@@ -36,3 +36,9 @@ class UnknownException extends AppException {
     super.message = 'Unexpected error occurred. Please try again.',
   ]);
 }
+
+class CacheException extends AppException {
+  const CacheException([
+    super.message = 'Local cache error. Please try again.',
+  ]);
+}

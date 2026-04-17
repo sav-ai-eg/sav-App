@@ -1,18 +1,19 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sav/core/constants/app_constants.dart';
+import 'package:dartz/dartz.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/features/auth/data/params/login_params.dart';
 import 'package:sav/features/auth/domain/entities/auth_session_entity.dart';
 import 'package:sav/features/auth/domain/usecases/login_use_case.dart';
+import 'package:sav/features/auth/domain/usecases/persist_auth_session_use_case.dart';
 
 part 'login_state.dart';
 
 class LoginCubit extends Cubit<LoginState> {
-  LoginCubit(this._loginUseCase, this._prefs) : super(const LoginInitial());
+  LoginCubit(this._loginUseCase, this._persistSessionUseCase)
+      : super(const LoginInitial());
 
   final LoginUseCase _loginUseCase;
-  final SharedPreferences _prefs;
+  final PersistAuthSessionUseCase _persistSessionUseCase;
 
   Future<void> login({
     required String username,
@@ -51,19 +52,17 @@ class LoginCubit extends Cubit<LoginState> {
           return;
         }
 
-        await _persistSession(session);
-        emit(const LoginSuccess());
+        final persistResult = await _persistSession(session);
+        persistResult.fold(
+          (persistFailure) => emit(LoginFailure(_mapFailureMessage(persistFailure))),
+          (_) => emit(const LoginSuccess()),
+        );
       },
     );
   }
 
-  Future<void> _persistSession(AuthSessionEntity session) async {
-    await _prefs.setString(AppConstants.prefAccessToken, session.accessToken);
-    await _prefs.setString(AppConstants.prefRefreshToken, session.refreshToken);
-    await _prefs.setString(AppConstants.prefDriverId, session.user.id.toString());
-    await _prefs.setString(AppConstants.prefDriverName, session.user.displayName);
-    await _prefs.setString(AppConstants.prefDriverUsername, session.user.username);
-    await _prefs.setString(AppConstants.prefDriverRole, session.user.role);
+  Future<Either<Failure, Unit>> _persistSession(AuthSessionEntity session) {
+    return _persistSessionUseCase(session: session);
   }
 
   String _mapFailureMessage(Failure failure) {

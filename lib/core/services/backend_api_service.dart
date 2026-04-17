@@ -1,14 +1,13 @@
-import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/constants/api_endpoints.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/network/api_consumer.dart';
-import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/features/auth/data/models/auth_session_model.dart';
 
 class BackendApiService {
-  BackendApiService({ApiConsumer? apiConsumer, Dio? dio})
-      : _apiConsumer = apiConsumer ?? DioApiConsumer(dio ?? Dio());
+  BackendApiService({required ApiConsumer apiConsumer})
+      : _apiConsumer = apiConsumer;
 
   final ApiConsumer _apiConsumer;
 
@@ -18,12 +17,13 @@ class BackendApiService {
   }) async {
     try {
       final response = await _apiConsumer.post(
-        '/api/auth/login/',
+        ApiEndpoints.authLogin,
         headers: _jsonHeaders,
         body: <String, dynamic>{
           'username': username,
           'password': password,
         },
+        requiresAuth: false,
       );
 
       final payload = response.data;
@@ -55,11 +55,11 @@ class BackendApiService {
   }
 
   Future<Map<String, dynamic>> fetchDriverFeed({
-    required String accessToken,
+    String? accessToken,
   }) async {
     try {
       final response = await _apiConsumer.get(
-        '/api/auth/driver/feed/',
+        ApiEndpoints.authDriverFeed,
         headers: _authHeaders(accessToken),
       );
 
@@ -77,7 +77,7 @@ class BackendApiService {
   }
 
   Future<List<BackendTripHistoryItem>> fetchTripHistory({
-    required String accessToken,
+    String? accessToken,
     DateTime? startDate,
     DateTime? endDate,
     int pageSize = 100,
@@ -99,7 +99,7 @@ class BackendApiService {
       }
 
       final response = await _apiConsumer.get(
-        '/api/auth/driver/trips/history/',
+        ApiEndpoints.authDriverTripsHistory,
         queryParameters: query,
         headers: _authHeaders(accessToken),
       );
@@ -236,10 +236,15 @@ class BackendApiService {
     return int.tryParse((value ?? '').toString()) ?? defaultValue;
   }
 
-  Map<String, String> _authHeaders(String accessToken) {
+  Map<String, String> _authHeaders(String? accessToken) {
+    final token = accessToken?.trim() ?? '';
+    if (token.isEmpty) {
+      return _jsonHeaders;
+    }
+
     return <String, String>{
       ..._jsonHeaders,
-      'Authorization': 'Bearer $accessToken',
+      'Authorization': 'Bearer $token',
     };
   }
 

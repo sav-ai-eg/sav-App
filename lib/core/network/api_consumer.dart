@@ -5,6 +5,7 @@ abstract class ApiConsumer {
     String path, {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   });
 
   Future<ApiResponse> post(
@@ -12,6 +13,7 @@ abstract class ApiConsumer {
     dynamic body,
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   });
 
   Future<ApiResponse> delete(
@@ -19,5 +21,6 @@ abstract class ApiConsumer {
     dynamic body,
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    bool requiresAuth = true,
   });
 }

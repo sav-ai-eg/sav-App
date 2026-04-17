@@ -1,4 +1,5 @@
 import 'package:sav/core/errors/exceptions.dart';
+import 'package:sav/core/constants/api_endpoints.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:sav/features/auth/data/models/auth_session_model.dart';
@@ -13,8 +14,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<AuthSessionModel> login({required LoginParams params}) async {
     try {
       final response = await _apiConsumer.post(
-        '/api/auth/login/',
+        ApiEndpoints.authLogin,
         body: params.toJson(),
+        requiresAuth: false,
       );
 
       final payload = response.data;
@@ -30,6 +32,33 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         _extractLoginErrorMessage(
           payload: payload,
           statusCode: response.statusCode,
+        ),
+      );
+    } on AppException {
+      rethrow;
+    } catch (_) {
+      throw const UnknownException();
+    }
+  }
+
+  @override
+  Future<void> logout({required String refreshToken}) async {
+    try {
+      final response = await _apiConsumer.post(
+        ApiEndpoints.authLogout,
+        body: <String, dynamic>{'refresh': refreshToken},
+      );
+
+      if (response.statusCode == 200 ||
+          response.statusCode == 204 ||
+          response.statusCode == 205) {
+        return;
+      }
+
+      throw ServerException(
+        _extractErrorMessage(
+          response.data,
+          fallback: 'Unable to logout right now. Please try again.',
         ),
       );
     } on AppException {

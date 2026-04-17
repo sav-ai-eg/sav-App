@@ -3,13 +3,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
+import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
 import 'settings_state.dart';
 
 class SettingsCubit extends Cubit<SettingsState> {
   final FirestoreService _firestoreService;
   final SharedPreferences _prefs;
+  final LogoutUseCase _logoutUseCase;
 
-  SettingsCubit(this._firestoreService, this._prefs)
+  SettingsCubit(this._firestoreService, this._prefs, this._logoutUseCase)
       : super(const SettingsInitial());
 
   Future<void> loadDriverData() async {
@@ -52,6 +54,6 @@ class SettingsCubit extends Cubit<SettingsState> {
   }
 
   Future<void> signOut() async {
-    await _prefs.clear();
+    await _logoutUseCase();
   }
 }

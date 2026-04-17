@@ -3,4 +3,6 @@ import 'package:sav/features/auth/data/params/login_params.dart';
 
 abstract class AuthRemoteDataSource {
   Future<AuthSessionModel> login({required LoginParams params});
+
+  Future<void> logout({required String refreshToken});
 }

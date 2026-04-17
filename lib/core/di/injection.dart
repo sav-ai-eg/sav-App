@@ -7,11 +7,15 @@ import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/di/injection.config.dart';
+import 'package:sav/features/auth/data/datasources/auth_local_data_source.dart';
+import 'package:sav/features/auth/data/datasources/auth_local_data_source_impl.dart';
 import 'package:sav/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:sav/features/auth/data/datasources/auth_remote_data_source_impl.dart';
 import 'package:sav/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:sav/features/auth/domain/repositories/auth_repository.dart';
 import 'package:sav/features/auth/domain/usecases/login_use_case.dart';
+import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
+import 'package:sav/features/auth/domain/usecases/persist_auth_session_use_case.dart';
 import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
 
 final getIt = GetIt.instance;
@@ -39,7 +43,7 @@ Future<void> configureDependencies() async {
 
   if (!getIt.isRegistered<ApiConsumer>()) {
     getIt.registerLazySingleton<ApiConsumer>(
-      () => DioApiConsumer(getIt<Dio>()),
+      () => DioApiConsumer(getIt<Dio>(), getIt<SharedPreferences>()),
     );
   }
 
@@ -49,9 +53,18 @@ Future<void> configureDependencies() async {
     );
   }
 
+  if (!getIt.isRegistered<AuthLocalDataSource>()) {
+    getIt.registerLazySingleton<AuthLocalDataSource>(
+      () => AuthLocalDataSourceImpl(getIt<SharedPreferences>()),
+    );
+  }
+
   if (!getIt.isRegistered<AuthRepository>()) {
     getIt.registerLazySingleton<AuthRepository>(
-      () => AuthRepositoryImpl(getIt<AuthRemoteDataSource>()),
+      () => AuthRepositoryImpl(
+        getIt<AuthRemoteDataSource>(),
+        getIt<AuthLocalDataSource>(),
+      ),
     );
   }
 
@@ -61,9 +74,24 @@ Future<void> configureDependencies() async {
     );
   }
 
+  if (!getIt.isRegistered<PersistAuthSessionUseCase>()) {
+    getIt.registerLazySingleton<PersistAuthSessionUseCase>(
+      () => PersistAuthSessionUseCase(getIt<AuthRepository>()),
+    );
+  }
+
+  if (!getIt.isRegistered<LogoutUseCase>()) {
+    getIt.registerLazySingleton<LogoutUseCase>(
+      () => LogoutUseCase(getIt<AuthRepository>()),
+    );
+  }
+
   if (!getIt.isRegistered<LoginCubit>()) {
     getIt.registerFactory<LoginCubit>(
-      () => LoginCubit(getIt<LoginUseCase>(), getIt<SharedPreferences>()),
+      () => LoginCubit(
+        getIt<LoginUseCase>(),
+        getIt<PersistAuthSessionUseCase>(),
+      ),
     );
   }
 

@@ -15,6 +15,7 @@ import 'package:sav/features/settings/presentation/views/widgets/settings_sectio
 import 'package:sav/features/settings/presentation/views/widgets/sign_out_button.dart';
 import 'package:sav/features/settings/presentation/views/widgets/vehicle_info_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
 
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
@@ -25,6 +26,7 @@ class SettingsView extends StatelessWidget {
       create: (_) => SettingsCubit(
         getIt<FirestoreService>(),
         getIt<SharedPreferences>(),
+        getIt<LogoutUseCase>(),
       )..loadDriverData(),
       child: const _SettingsBody(),
     );

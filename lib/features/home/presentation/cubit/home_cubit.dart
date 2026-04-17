@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/di/injection.dart';
 import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/firestore_service.dart';
@@ -24,7 +25,7 @@ class HomeCubit extends Cubit<HomeState> {
     this._connectivity,
     this._offlineCache,
     this._prefs,
-  )   : _backendApiService = BackendApiService(),
+  )   : _backendApiService = getIt<BackendApiService>(),
         super(const HomeInitial());
 
   /// Load dashboard stats and duty indicators for week/month.
@@ -48,7 +49,7 @@ class HomeCubit extends Cubit<HomeState> {
         return;
       }
 
-      final feed = await _backendApiService.fetchDriverFeed(accessToken: token);
+      final feed = await _backendApiService.fetchDriverFeed();
 
       final profile = (feed['profile'] as Map<String, dynamic>?) ??
           const <String, dynamic>{};
@@ -74,12 +75,10 @@ class HomeCubit extends Cubit<HomeState> {
       final weekEnd = weekStart.add(const Duration(days: 6));
 
       final monthHistory = await _backendApiService.fetchTripHistory(
-        accessToken: token,
         startDate: monthStart,
         endDate: monthEnd,
       );
       final weekHistory = await _backendApiService.fetchTripHistory(
-        accessToken: token,
         startDate: weekStart,
         endDate: weekEnd,
       );
@@ -172,7 +171,6 @@ class HomeCubit extends Cubit<HomeState> {
       final monthStart = DateTime(focusedMonth.year, focusedMonth.month, 1);
       final monthEnd = DateTime(focusedMonth.year, focusedMonth.month + 1, 0);
       final monthHistory = await _backendApiService.fetchTripHistory(
-        accessToken: token,
         startDate: monthStart,
         endDate: monthEnd,
       );
