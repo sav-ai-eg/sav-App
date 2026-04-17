@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/di/injection.dart';
-import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/util/routing/routes.dart';
 import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
 import 'package:sav/features/auth/presentation/views/login_view.dart';
@@ -27,10 +25,7 @@ class AppRouter {
       case Routes.driverDataView:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
-            create: (_) => LoginCubit(
-              getIt<BackendApiService>(),
-              getIt<SharedPreferences>(),
-            ),
+            create: (_) => getIt<LoginCubit>(),
             child: const LoginView(),
           ),
         );

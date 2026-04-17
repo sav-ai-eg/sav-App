@@ -1,14 +1,17 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
-import 'package:sav/core/services/backend_api_service.dart';
+import 'package:sav/core/errors/failures.dart';
+import 'package:sav/features/auth/data/params/login_params.dart';
+import 'package:sav/features/auth/domain/entities/auth_session_entity.dart';
+import 'package:sav/features/auth/domain/usecases/login_use_case.dart';
 
 part 'login_state.dart';
 
 class LoginCubit extends Cubit<LoginState> {
-  LoginCubit(this._apiService, this._prefs) : super(const LoginInitial());
+  LoginCubit(this._loginUseCase, this._prefs) : super(const LoginInitial());
 
-  final BackendApiService _apiService;
+  final LoginUseCase _loginUseCase;
   final SharedPreferences _prefs;
 
   Future<void> login({
@@ -32,32 +35,39 @@ class LoginCubit extends Cubit<LoginState> {
 
     emit(const LoginSubmitting());
 
-    try {
-      final session = await _apiService.login(
-        username: normalizedUsername,
-        password: password,
-      );
+    final result = await _loginUseCase(
+      LoginParams(username: normalizedUsername, password: password),
+    );
 
-      if (session.user.role.toLowerCase() != 'driver') {
-        emit(const LoginFailure('Only driver accounts are allowed in this app.'));
-        return;
-      }
+    await result.fold(
+      (failure) async {
+        emit(LoginFailure(_mapFailureMessage(failure)));
+      },
+      (session) async {
+        if (session.user.role.toLowerCase() != 'driver') {
+          emit(
+            const LoginFailure('Only driver accounts are allowed in this app.'),
+          );
+          return;
+        }
 
-      await _prefs.setString(AppConstants.prefAccessToken, session.accessToken);
-      await _prefs.setString(AppConstants.prefRefreshToken, session.refreshToken);
-      await _prefs.setString(AppConstants.prefDriverId, session.user.id.toString());
-      await _prefs.setString(AppConstants.prefDriverName, session.user.displayName);
-      await _prefs.setString(AppConstants.prefDriverUsername, session.user.username);
-      await _prefs.setString(AppConstants.prefDriverRole, session.user.role);
-
-      emit(const LoginSuccess());
-    } catch (error) {
-      emit(LoginFailure(_mapLoginError(error)));
-    }
+        await _persistSession(session);
+        emit(const LoginSuccess());
+      },
+    );
   }
 
-  String _mapLoginError(Object error) {
-    final message = error.toString().replaceFirst('Exception: ', '').trim();
+  Future<void> _persistSession(AuthSessionEntity session) async {
+    await _prefs.setString(AppConstants.prefAccessToken, session.accessToken);
+    await _prefs.setString(AppConstants.prefRefreshToken, session.refreshToken);
+    await _prefs.setString(AppConstants.prefDriverId, session.user.id.toString());
+    await _prefs.setString(AppConstants.prefDriverName, session.user.displayName);
+    await _prefs.setString(AppConstants.prefDriverUsername, session.user.username);
+    await _prefs.setString(AppConstants.prefDriverRole, session.user.role);
+  }
+
+  String _mapFailureMessage(Failure failure) {
+    final message = failure.message.trim();
     if (message.isEmpty) {
       return 'Login failed. Please try again.';
     }

@@ -1,15 +1,12 @@
 import 'package:sav/features/auth/data/models/auth_user_model.dart';
+import 'package:sav/features/auth/domain/entities/auth_session_entity.dart';
 
-class AuthSessionModel {
+class AuthSessionModel extends AuthSessionEntity {
   const AuthSessionModel({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.user,
+    required super.accessToken,
+    required super.refreshToken,
+    required super.user,
   });
-
-  final String accessToken;
-  final String refreshToken;
-  final AuthUserModel user;
 
   factory AuthSessionModel.fromMap(Map<String, dynamic> map) {
     return AuthSessionModel(

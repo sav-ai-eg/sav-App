@@ -1,14 +1,13 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
 
 class GooglePlacesService {
-  GooglePlacesService({http.Client? client})
-    : _client = client ?? http.Client();
+  GooglePlacesService({Dio? dio}) : _dio = dio ?? Dio();
 
-  final http.Client _client;
+  final Dio _dio;
   final Map<String, List<TripPlaceModel>> _autocompleteCache = {};
   final Map<String, TripPlaceModel> _detailsCache = {};
 
@@ -51,8 +50,8 @@ class GooglePlacesService {
       parameters,
     );
 
-    final response = await _client.get(uri);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final response = await _dio.getUri<dynamic>(uri);
+    final data = _toMap(response.data);
 
     if (response.statusCode != 200) {
       throw Exception('Places search failed (${response.statusCode}).');
@@ -102,8 +101,8 @@ class GooglePlacesService {
           'fields': 'place_id,name,formatted_address,geometry/location',
         });
 
-    final response = await _client.get(uri);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final response = await _dio.getUri<dynamic>(uri);
+    final data = _toMap(response.data);
 
     if (response.statusCode != 200) {
       throw Exception('Place details failed (${response.statusCode}).');
@@ -131,7 +130,36 @@ class GooglePlacesService {
     return details;
   }
 
-  void dispose() {
-    _client.close();
+  Map<String, dynamic> _toMap(dynamic rawData) {
+    if (rawData is Map<String, dynamic>) {
+      return rawData;
+    }
+
+    if (rawData is Map) {
+      return Map<String, dynamic>.from(rawData);
+    }
+
+    if (rawData is String) {
+      final body = rawData.trim();
+      if (body.isEmpty) {
+        return const <String, dynamic>{};
+      }
+
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
+
+    return const <String, dynamic>{};
   }
+
+  void dispose() {}
 }

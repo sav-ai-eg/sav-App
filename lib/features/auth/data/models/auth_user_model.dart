@@ -1,27 +1,14 @@
-class AuthUserModel {
+import 'package:sav/features/auth/domain/entities/auth_user_entity.dart';
+
+class AuthUserModel extends AuthUserEntity {
   const AuthUserModel({
-    required this.id,
-    required this.username,
-    required this.role,
-    required this.firstName,
-    required this.lastName,
-    required this.email,
+    required super.id,
+    required super.username,
+    required super.role,
+    required super.firstName,
+    required super.lastName,
+    required super.email,
   });
-
-  final int id;
-  final String username;
-  final String role;
-  final String firstName;
-  final String lastName;
-  final String email;
-
-  String get displayName {
-    final fullName = '${firstName.trim()} ${lastName.trim()}'.trim();
-    if (fullName.isNotEmpty) {
-      return fullName;
-    }
-    return username;
-  }
 
   factory AuthUserModel.fromMap(Map<String, dynamic> map) {
     return AuthUserModel(

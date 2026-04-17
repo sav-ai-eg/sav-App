@@ -1,37 +1,33 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/errors/exceptions.dart';
+import 'package:sav/core/network/api_consumer.dart';
+import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/features/auth/data/models/auth_session_model.dart';
 
 class BackendApiService {
-  BackendApiService({http.Client? client}) : _client = client ?? http.Client();
+  BackendApiService({ApiConsumer? apiConsumer, Dio? dio})
+      : _apiConsumer = apiConsumer ?? DioApiConsumer(dio ?? Dio());
 
-  final http.Client _client;
-
-  static const Duration _requestTimeout = Duration(seconds: 20);
+  final ApiConsumer _apiConsumer;
 
   Future<AuthSessionModel> login({
     required String username,
     required String password,
   }) async {
     try {
-      final response = await _client
-          .post(
-            _buildUri('/api/auth/login/'),
-            headers: _jsonHeaders,
-            body: jsonEncode({
-              'username': username,
-              'password': password,
-            }),
-          )
-          .timeout(_requestTimeout);
+      final response = await _apiConsumer.post(
+        '/api/auth/login/',
+        headers: _jsonHeaders,
+        body: <String, dynamic>{
+          'username': username,
+          'password': password,
+        },
+      );
 
-      final payload = _decodeMap(response);
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      final payload = response.data;
+      if (_isSuccess(response.statusCode)) {
         final session = AuthSessionModel.fromMap(payload);
         if (session.accessToken.isEmpty || session.refreshToken.isEmpty) {
           throw Exception('Login response is missing token data.');
@@ -45,39 +41,39 @@ class BackendApiService {
           statusCode: response.statusCode,
         ),
       );
-    } on TimeoutException {
+    } on RequestTimeoutException {
       throw Exception(
         'Login request timed out while connecting to ${AppConstants.apiBaseUrl}.',
       );
-    } on SocketException {
+    } on NoInternetException {
       throw Exception(
         'Cannot connect to ${AppConstants.apiBaseUrl}. Check network and backend URL.',
       );
-    } on http.ClientException {
-      throw Exception(
-        'Unable to reach ${AppConstants.apiBaseUrl}. Please verify backend URL.',
-      );
+    } on AppException catch (exception) {
+      throw Exception(exception.message);
     }
   }
 
   Future<Map<String, dynamic>> fetchDriverFeed({
     required String accessToken,
   }) async {
-    final response = await _client
-        .get(
-          _buildUri('/api/auth/driver/feed/'),
-          headers: _authHeaders(accessToken),
-        )
-        .timeout(_requestTimeout);
+    try {
+      final response = await _apiConsumer.get(
+        '/api/auth/driver/feed/',
+        headers: _authHeaders(accessToken),
+      );
 
-    final payload = _decodeMap(response);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return payload;
+      final payload = response.data;
+      if (_isSuccess(response.statusCode)) {
+        return payload;
+      }
+
+      throw Exception(
+        _extractErrorMessage(payload, fallback: 'Failed to load driver feed.'),
+      );
+    } on AppException catch (exception) {
+      throw Exception(exception.message);
     }
-
-    throw Exception(
-      _extractErrorMessage(payload, fallback: 'Failed to load driver feed.'),
-    );
   }
 
   Future<List<BackendTripHistoryItem>> fetchTripHistory({
@@ -91,9 +87,9 @@ class BackendApiService {
 
     var page = 1;
     while (page <= maxPages) {
-      final query = <String, String>{
-        'page': '$page',
-        'page_size': '$pageSize',
+      final query = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
       };
       if (startDate != null) {
         query['start_date'] = DateFormat('yyyy-MM-dd').format(startDate);
@@ -102,15 +98,14 @@ class BackendApiService {
         query['end_date'] = DateFormat('yyyy-MM-dd').format(endDate);
       }
 
-      final response = await _client
-          .get(
-            _buildUri('/api/auth/driver/trips/history/', queryParameters: query),
-            headers: _authHeaders(accessToken),
-          )
-          .timeout(_requestTimeout);
+      final response = await _apiConsumer.get(
+        '/api/auth/driver/trips/history/',
+        queryParameters: query,
+        headers: _authHeaders(accessToken),
+      );
 
-      final payload = _decodeMap(response);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      final payload = response.data;
+      if (!_isSuccess(response.statusCode)) {
         throw Exception(
           _extractErrorMessage(payload, fallback: 'Failed to load trip history.'),
         );
@@ -134,56 +129,8 @@ class BackendApiService {
     return items;
   }
 
-  Uri _buildUri(
-    String path, {
-    Map<String, String>? queryParameters,
-  }) {
-    final base = Uri.parse(AppConstants.apiBaseUrl);
-    final normalizedPath = _joinPaths(base.path, path);
-
-    return Uri(
-      scheme: base.scheme,
-      host: base.host,
-      port: base.hasPort ? base.port : null,
-      path: normalizedPath,
-      queryParameters: queryParameters == null || queryParameters.isEmpty
-          ? null
-          : queryParameters,
-    );
-  }
-
-  String _joinPaths(String basePath, String childPath) {
-    final cleanBase = basePath.endsWith('/')
-        ? basePath.substring(0, basePath.length - 1)
-        : basePath;
-    final cleanChild = childPath.startsWith('/')
-        ? childPath
-        : '/$childPath';
-
-    final joined = '$cleanBase$cleanChild';
-    return joined.isEmpty ? '/' : joined;
-  }
-
-  Map<String, dynamic> _decodeMap(http.Response response) {
-    if (response.bodyBytes.isEmpty) {
-      return const <String, dynamic>{};
-    }
-
-    final body = utf8.decode(response.bodyBytes).trim();
-    if (body.isEmpty) {
-      return const <String, dynamic>{};
-    }
-
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-    } catch (_) {
-      // Ignore invalid JSON and return empty map below.
-    }
-
-    return const <String, dynamic>{};
+  bool _isSuccess(int statusCode) {
+    return statusCode >= 200 && statusCode < 300;
   }
 
   String _extractErrorMessage(
