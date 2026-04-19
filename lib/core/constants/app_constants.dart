@@ -36,9 +36,12 @@ class AppConstants {
   static const String prefDriverRole = 'driverRole';
   static const String prefAccessToken = 'accessToken';
   static const String prefRefreshToken = 'refreshToken';
+  static const String prefHomeDashboardCache = 'homeDashboardCache';
+  static const String prefHomeDashboardCacheAt = 'homeDashboardCacheAt';
 
-  static const String _apiBaseUrlFromDefine =
-      String.fromEnvironment('SAV_API_BASE_URL');
+  static const String _apiBaseUrlFromDefine = String.fromEnvironment(
+    'SAV_API_BASE_URL',
+  );
   static const String _defaultApiBaseUrl = 'https://sav.up.railway.app';
 
   static String get apiBaseUrl {

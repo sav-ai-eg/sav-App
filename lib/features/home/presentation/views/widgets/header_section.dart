@@ -13,6 +13,11 @@ class HeaderSection extends StatelessWidget {
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
         final name = state is HomeLoaded ? state.driverName : 'Driver';
+        final subtitle = state is HomeLoaded
+            ? (!state.isOnline || state.isFromCache
+                  ? 'Showing latest synced data'
+                  : 'Stay safe on the road')
+            : 'Stay safe on the road';
 
         return Padding(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
@@ -23,10 +28,7 @@ class HeaderSection extends StatelessWidget {
                 height: 56.w,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.primaryColor,
-                    width: 0.5,
-                  ),
+                  border: Border.all(color: AppColors.primaryColor, width: 0.5),
                 ),
                 child: ClipOval(
                   child: Icon(
@@ -50,7 +52,7 @@ class HeaderSection extends StatelessWidget {
                   ),
                   SizedBox(height: 4.h),
                   Text(
-                    'Stay safe on the road',
+                    subtitle,
                     style: GoogleFonts.inter(
                       fontSize: 10.sp,
                       fontWeight: FontWeight.w300,

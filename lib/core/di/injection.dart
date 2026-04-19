@@ -5,7 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/core/services/backend_api_service.dart';
+import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
+import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/di/injection.config.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source_impl.dart';
@@ -17,6 +19,15 @@ import 'package:sav/features/auth/domain/usecases/login_use_case.dart';
 import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
 import 'package:sav/features/auth/domain/usecases/persist_auth_session_use_case.dart';
 import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
+import 'package:sav/features/home/data/datasources/home_local_data_source.dart';
+import 'package:sav/features/home/data/datasources/home_local_data_source_impl.dart';
+import 'package:sav/features/home/data/datasources/home_remote_data_source.dart';
+import 'package:sav/features/home/data/datasources/home_remote_data_source_impl.dart';
+import 'package:sav/features/home/data/repositories/home_repository_impl.dart';
+import 'package:sav/features/home/domain/repositories/home_repository.dart';
+import 'package:sav/features/home/domain/usecases/load_home_dashboard_use_case.dart';
+import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_case.dart';
+import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
 
 final getIt = GetIt.instance;
 
@@ -88,10 +99,8 @@ Future<void> configureDependencies() async {
 
   if (!getIt.isRegistered<LoginCubit>()) {
     getIt.registerFactory<LoginCubit>(
-      () => LoginCubit(
-        getIt<LoginUseCase>(),
-        getIt<PersistAuthSessionUseCase>(),
-      ),
+      () =>
+          LoginCubit(getIt<LoginUseCase>(), getIt<PersistAuthSessionUseCase>()),
     );
   }
 
@@ -104,6 +113,50 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<BackendApiService>()) {
     getIt.registerLazySingleton<BackendApiService>(
       () => BackendApiService(apiConsumer: getIt<ApiConsumer>()),
+    );
+  }
+
+  if (!getIt.isRegistered<HomeRemoteDataSource>()) {
+    getIt.registerLazySingleton<HomeRemoteDataSource>(
+      () => HomeRemoteDataSourceImpl(getIt<ApiConsumer>()),
+    );
+  }
+
+  if (!getIt.isRegistered<HomeLocalDataSource>()) {
+    getIt.registerLazySingleton<HomeLocalDataSource>(
+      () => HomeLocalDataSourceImpl(getIt<SharedPreferences>()),
+    );
+  }
+
+  if (!getIt.isRegistered<HomeRepository>()) {
+    getIt.registerLazySingleton<HomeRepository>(
+      () => HomeRepositoryImpl(
+        getIt<HomeRemoteDataSource>(),
+        getIt<HomeLocalDataSource>(),
+        getIt<ConnectivityService>(),
+        getIt<OfflineCacheService>(),
+      ),
+    );
+  }
+
+  if (!getIt.isRegistered<LoadHomeDashboardUseCase>()) {
+    getIt.registerLazySingleton<LoadHomeDashboardUseCase>(
+      () => LoadHomeDashboardUseCase(getIt<HomeRepository>()),
+    );
+  }
+
+  if (!getIt.isRegistered<LoadHomeDutyForMonthUseCase>()) {
+    getIt.registerLazySingleton<LoadHomeDutyForMonthUseCase>(
+      () => LoadHomeDutyForMonthUseCase(getIt<HomeRepository>()),
+    );
+  }
+
+  if (!getIt.isRegistered<HomeCubit>()) {
+    getIt.registerFactory<HomeCubit>(
+      () => HomeCubit(
+        getIt<LoadHomeDashboardUseCase>(),
+        getIt<LoadHomeDutyForMonthUseCase>(),
+      ),
     );
   }
 }

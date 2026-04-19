@@ -218,11 +218,7 @@ class _HeaderButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8.r),
           border: Border.all(color: const Color(0xFFE2E7ED)),
         ),
-        child: Icon(
-          icon,
-          size: 20.sp,
-          color: const Color(0xFF323745),
-        ),
+        child: Icon(icon, size: 20.sp, color: const Color(0xFF323745)),
       ),
     );
   }
@@ -278,11 +274,8 @@ class _DaysGrid extends StatelessWidget {
     final firstCell = firstDay.subtract(Duration(days: firstDay.weekday - 1));
     final days = List<DateTime>.generate(
       42,
-      (index) => DateTime(
-        firstCell.year,
-        firstCell.month,
-        firstCell.day + index,
-      ),
+      (index) =>
+          DateTime(firstCell.year, firstCell.month, firstCell.day + index),
     );
 
     return SizedBox(

@@ -53,25 +53,31 @@ class _WeekScheduleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
-        final weekDuty =
-            state is HomeLoaded ? state.weekDuty : <int, DutyLevel>{};
-        final monthDuty =
-            state is HomeLoaded ? state.monthDuty : <DateTime, DutyLevel>{};
-        final focusedMonth =
-            state is HomeLoaded ? state.focusedMonth : DateTime.now();
+        final weekDuty = state is HomeLoaded
+            ? state.weekDuty
+            : <int, DutyLevel>{};
+        final monthDuty = state is HomeLoaded
+            ? state.monthDuty
+            : <DateTime, DutyLevel>{};
+        final focusedMonth = state is HomeLoaded
+            ? state.focusedMonth
+            : DateTime.now();
+        final isMonthLoading = state is HomeLoaded && state.isMonthLoading;
 
         return GestureDetector(
-          onTap: () async {
-            await showDutyCalendarDialog(
-              context: context,
-              dutyByDate: monthDuty,
-              focusedMonth: focusedMonth,
-              selectedDate: DateTime.now(),
-              onMonthChanged: (month) {
-                context.read<HomeCubit>().loadDutyForMonth(month);
-              },
-            );
-          },
+          onTap: isMonthLoading
+              ? null
+              : () async {
+                  await showDutyCalendarDialog(
+                    context: context,
+                    dutyByDate: monthDuty,
+                    focusedMonth: focusedMonth,
+                    selectedDate: DateTime.now(),
+                    onMonthChanged: (month) {
+                      context.read<HomeCubit>().loadDutyForMonth(month);
+                    },
+                  );
+                },
           child: Container(
             height: 110.h,
             decoration: BoxDecoration(
@@ -92,10 +98,7 @@ class _WeekScheduleCard extends StatelessWidget {
                 children: List.generate(_dayLabels.length, (i) {
                   final duty = weekDuty[_weekdayValues[i]] ?? DutyLevel.off;
 
-                  return _DayColumn(
-                    name: _dayLabels[i],
-                    duty: duty,
-                  );
+                  return _DayColumn(name: _dayLabels[i], duty: duty);
                 }),
               ),
             ),
@@ -110,10 +113,7 @@ class _DayColumn extends StatelessWidget {
   final String name;
   final DutyLevel duty;
 
-  const _DayColumn({
-    required this.name,
-    required this.duty,
-  });
+  const _DayColumn({required this.name, required this.duty});
 
   @override
   Widget build(BuildContext context) {

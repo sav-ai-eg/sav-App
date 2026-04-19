@@ -27,7 +27,10 @@ class StatisticsSection extends StatelessWidget {
           totalAlerts = state.totalAlerts;
         }
 
-        final isLoading = state is HomeLoading;
+        final isLoading =
+            state is HomeLoading ||
+            (state is HomeLoaded &&
+                (state.isRefreshing || state.isMonthLoading));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,8 +70,7 @@ class StatisticsSection extends StatelessWidget {
                 Expanded(
                   child: Column(
                     children: [
-                      _DistractedCard(
-                          distractedPercent: distractedPercent),
+                      _DistractedCard(distractedPercent: distractedPercent),
                       SizedBox(height: 8.h),
                       _AlertsCard(totalAlerts: totalAlerts),
                     ],
@@ -87,10 +89,7 @@ class _AwakeBigCard extends StatelessWidget {
   final double awakePercent;
   final String duration;
 
-  const _AwakeBigCard({
-    required this.awakePercent,
-    required this.duration,
-  });
+  const _AwakeBigCard({required this.awakePercent, required this.duration});
 
   @override
   Widget build(BuildContext context) {

@@ -11,7 +11,9 @@ class HomeInitial extends HomeState {
 }
 
 class HomeLoading extends HomeState {
-  const HomeLoading();
+  const HomeLoading({this.showSkeleton = true});
+
+  final bool showSkeleton;
 }
 
 class HomeLoaded extends HomeState {
@@ -29,6 +31,10 @@ class HomeLoaded extends HomeState {
   final DateTime focusedMonth;
   final bool isOnline;
   final int pendingSyncCount;
+  final bool isFromCache;
+  final bool isRefreshing;
+  final bool isMonthLoading;
+  final String? infoMessage;
 
   const HomeLoaded({
     required this.driverName,
@@ -45,6 +51,10 @@ class HomeLoaded extends HomeState {
     required this.focusedMonth,
     this.isOnline = true,
     this.pendingSyncCount = 0,
+    this.isFromCache = false,
+    this.isRefreshing = false,
+    this.isMonthLoading = false,
+    this.infoMessage,
   });
 
   DutyLevel dutyForDate(DateTime day) {
@@ -67,6 +77,11 @@ class HomeLoaded extends HomeState {
     DateTime? focusedMonth,
     bool? isOnline,
     int? pendingSyncCount,
+    bool? isFromCache,
+    bool? isRefreshing,
+    bool? isMonthLoading,
+    String? infoMessage,
+    bool clearInfoMessage = false,
   }) {
     return HomeLoaded(
       driverName: driverName ?? this.driverName,
@@ -83,6 +98,10 @@ class HomeLoaded extends HomeState {
       focusedMonth: focusedMonth ?? this.focusedMonth,
       isOnline: isOnline ?? this.isOnline,
       pendingSyncCount: pendingSyncCount ?? this.pendingSyncCount,
+      isFromCache: isFromCache ?? this.isFromCache,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
+      isMonthLoading: isMonthLoading ?? this.isMonthLoading,
+      infoMessage: clearInfoMessage ? null : (infoMessage ?? this.infoMessage),
     );
   }
 
@@ -97,4 +116,10 @@ class HomeLoaded extends HomeState {
 class HomeError extends HomeState {
   final String message;
   const HomeError(this.message);
+}
+
+class HomeEmpty extends HomeState {
+  const HomeEmpty(this.message);
+
+  final String message;
 }
