@@ -89,7 +89,8 @@ class _LoginViewState extends State<LoginView> {
                   final horizontalPadding = constraints.maxWidth >= 720 ? 36.0 : 20.0;
                   final maxContentWidth = constraints.maxWidth >= 1024 ? 460.0 : 420.0;
                   final topPadding = isCompactHeight ? 20.h : 36.h;
-                  final bottomPadding = isCompactHeight ? 18.h : 28.h;
+                  final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+                  final bottomPadding = (isCompactHeight ? 18.h : 28.h) + keyboardInset;
                   final availableHeight = constraints.maxHeight - topPadding - bottomPadding;
                   final minContentHeight = availableHeight > 0 ? availableHeight : 0.0;
 
@@ -359,12 +360,15 @@ class _AuthField extends StatelessWidget {
           obscureText: obscureText,
           textInputAction: textInputAction,
           keyboardType: keyboardType,
+          textCapitalization: TextCapitalization.none,
           autofillHints: autofillHints,
           onChanged: onChanged,
           onFieldSubmitted: onFieldSubmitted,
           textAlignVertical: TextAlignVertical.center,
           autocorrect: false,
           enableSuggestions: !obscureText,
+          smartDashesType: SmartDashesType.disabled,
+          smartQuotesType: SmartQuotesType.disabled,
           style: GoogleFonts.inter(
             fontSize: 14.sp,
             fontWeight: FontWeight.w400,
