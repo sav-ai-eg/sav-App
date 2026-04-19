@@ -78,6 +78,30 @@ class LoginCubit extends Cubit<LoginState> {
       return 'Invalid username or password.';
     }
 
+    if (normalized.contains('inactive')) {
+      return 'This account is inactive. Please contact support.';
+    }
+
+    if (normalized.contains('too many') || normalized.contains('429')) {
+      return 'Too many login attempts. Please try again shortly.';
+    }
+
+    if (normalized.contains('timeout') || normalized.contains('timed out')) {
+      return 'Connection timed out. Please check your network and try again.';
+    }
+
+    if (normalized.contains('no internet') ||
+        normalized.contains('network') ||
+        normalized.contains('connection')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    if (normalized.contains('server error') ||
+        normalized.contains('unexpected error') ||
+        normalized.contains('unable to login right now')) {
+      return 'Login service is temporarily unavailable. Please try again later.';
+    }
+
     return message;
   }
 }

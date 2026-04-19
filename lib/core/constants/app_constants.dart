@@ -42,11 +42,11 @@ class AppConstants {
   static const String _defaultApiBaseUrl = 'https://sav.up.railway.app';
 
   static String get apiBaseUrl {
-    if (_apiBaseUrlFromDefine.isNotEmpty) {
-      return _normalizeApiBaseUrl(_apiBaseUrlFromDefine);
+    if (_apiBaseUrlFromDefine.isEmpty) {
+      return _defaultApiBaseUrl;
     }
 
-    return _defaultApiBaseUrl;
+    return _normalizeApiBaseUrl(_apiBaseUrlFromDefine);
   }
 
   static String _normalizeApiBaseUrl(String rawValue) {
@@ -64,8 +64,52 @@ class AppConstants {
       return _defaultApiBaseUrl;
     }
 
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'https' || _isBlockedHost(uri.host)) {
+      return _defaultApiBaseUrl;
+    }
+
     final portSegment = uri.hasPort ? ':${uri.port}' : '';
-    return '${uri.scheme}://${uri.host}$portSegment';
+    return '$scheme://${uri.host}$portSegment';
+  }
+
+  static bool _isBlockedHost(String host) {
+    final normalizedHost = host.toLowerCase().trim();
+
+    if (normalizedHost == 'localhost' || normalizedHost == '10.0.2.2') {
+      return true;
+    }
+
+    if (normalizedHost == '127.0.0.1' || normalizedHost.startsWith('127.')) {
+      return true;
+    }
+
+    final octets = normalizedHost.split('.');
+    if (octets.length != 4) {
+      return false;
+    }
+
+    final parts = octets.map(int.tryParse).toList(growable: false);
+    if (parts.any((value) => value == null || value < 0 || value > 255)) {
+      return false;
+    }
+
+    final first = parts[0]!;
+    final second = parts[1]!;
+
+    if (first == 10) {
+      return true;
+    }
+
+    if (first == 172 && second >= 16 && second <= 31) {
+      return true;
+    }
+
+    if (first == 192 && second == 168) {
+      return true;
+    }
+
+    return false;
   }
 
   // ─── Emergency Numbers ────────────────────────────────────
