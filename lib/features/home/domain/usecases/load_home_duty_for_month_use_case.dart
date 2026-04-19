@@ -1,8 +1,10 @@
 import 'package:dartz/dartz.dart';
+import 'package:injectable/injectable.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/features/home/domain/entities/home_duty_level.dart';
 import 'package:sav/features/home/domain/repositories/home_repository.dart';
 
+@injectable
 class LoadHomeDutyForMonthUseCase {
   const LoadHomeDutyForMonthUseCase(this._repository);
 

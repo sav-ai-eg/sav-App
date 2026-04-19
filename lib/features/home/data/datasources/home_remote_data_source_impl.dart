@@ -1,3 +1,4 @@
+import 'package:injectable/injectable.dart';
 import 'package:sav/core/constants/api_endpoints.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/network/api_consumer.dart';
@@ -6,6 +7,7 @@ import 'package:sav/features/home/data/models/home_alert_item_model.dart';
 import 'package:sav/features/home/data/models/home_trip_history_item_model.dart';
 import 'package:sav/features/home/data/params/home_trip_history_query_params.dart';
 
+@Injectable(as: HomeRemoteDataSource)
 class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
   HomeRemoteDataSourceImpl(this._apiConsumer);
 

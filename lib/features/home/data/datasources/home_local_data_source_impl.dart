@@ -1,11 +1,13 @@
 import 'dart:convert';
 
+import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/features/home/data/datasources/home_local_data_source.dart';
 import 'package:sav/features/home/data/models/home_dashboard_model.dart';
 
+@Injectable(as: HomeLocalDataSource)
 class HomeLocalDataSourceImpl implements HomeLocalDataSource {
   HomeLocalDataSourceImpl(this._prefs);
 

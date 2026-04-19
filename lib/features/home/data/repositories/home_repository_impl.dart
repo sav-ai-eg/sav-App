@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:injectable/injectable.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/core/services/connectivity_service.dart';
@@ -13,6 +14,7 @@ import 'package:sav/features/home/domain/entities/home_duty_level.dart';
 import 'package:sav/features/home/domain/entities/home_trip_history_item_entity.dart';
 import 'package:sav/features/home/domain/repositories/home_repository.dart';
 
+@Injectable(as: HomeRepository)
 class HomeRepositoryImpl implements HomeRepository {
   HomeRepositoryImpl(
     this._remoteDataSource,

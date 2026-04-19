@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/errors/exceptions.dart';
@@ -8,6 +9,7 @@ import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/api_response.dart';
 import 'package:sav/core/network/interceptors/auth_token_interceptor.dart';
 
+@LazySingleton(as: ApiConsumer)
 class DioApiConsumer implements ApiConsumer {
   DioApiConsumer(this._dio, this._prefs) {
     _dio.options = _dio.options.copyWith(
