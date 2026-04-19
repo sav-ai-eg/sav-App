@@ -43,6 +43,17 @@ class AppRouter {
           builder: (_) => const EmergencyView(),
         );
 
+      case Routes.notificationView:
+        return MaterialPageRoute(
+          builder: (_) => const Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: Text('Notifications will be available soon.'),
+              ),
+            ),
+          ),
+        );
+
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
