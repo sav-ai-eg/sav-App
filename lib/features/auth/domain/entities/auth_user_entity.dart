@@ -8,6 +8,10 @@ class AuthUserEntity extends Equatable {
     required this.firstName,
     required this.lastName,
     required this.email,
+    this.phoneNumber = '',
+    this.licenseNumber = '',
+    this.emergencyContactPhone = '',
+    this.avatarUrl = '',
   });
 
   final int id;
@@ -16,6 +20,10 @@ class AuthUserEntity extends Equatable {
   final String firstName;
   final String lastName;
   final String email;
+  final String phoneNumber;
+  final String licenseNumber;
+  final String emergencyContactPhone;
+  final String avatarUrl;
 
   String get displayName {
     final fullName = '${firstName.trim()} ${lastName.trim()}'.trim();
@@ -33,5 +41,9 @@ class AuthUserEntity extends Equatable {
         firstName,
         lastName,
         email,
+        phoneNumber,
+        licenseNumber,
+        emergencyContactPhone,
+        avatarUrl,
       ];
 }

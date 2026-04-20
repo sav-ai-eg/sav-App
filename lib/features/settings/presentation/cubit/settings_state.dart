@@ -23,7 +23,6 @@ class SettingsLoaded extends SettingsState {
   final String username;
   final String role;
   final bool hasValidSession;
-  final bool isSavingProfile;
   final bool isSigningOut;
 
   const SettingsLoaded({
@@ -37,7 +36,6 @@ class SettingsLoaded extends SettingsState {
     required this.username,
     required this.role,
     required this.hasValidSession,
-    this.isSavingProfile = false,
     this.isSigningOut = false,
   });
 
@@ -52,7 +50,6 @@ class SettingsLoaded extends SettingsState {
     String? username,
     String? role,
     bool? hasValidSession,
-    bool? isSavingProfile,
     bool? isSigningOut,
   }) {
     return SettingsLoaded(
@@ -68,7 +65,6 @@ class SettingsLoaded extends SettingsState {
       username: username ?? this.username,
       role: role ?? this.role,
       hasValidSession: hasValidSession ?? this.hasValidSession,
-      isSavingProfile: isSavingProfile ?? this.isSavingProfile,
       isSigningOut: isSigningOut ?? this.isSigningOut,
     );
   }

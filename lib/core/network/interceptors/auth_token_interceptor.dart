@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/util/routing/routes.dart';
+import 'package:sav/sav_app.dart';
 import 'package:sav/core/constants/api_endpoints.dart';
 
 class AuthRequestOptionsKeys {
@@ -172,8 +174,25 @@ class AuthTokenInterceptor extends QueuedInterceptor {
       _prefs.remove(AppConstants.prefRefreshToken),
       _prefs.remove(AppConstants.prefDriverId),
       _prefs.remove(AppConstants.prefDriverName),
+      _prefs.remove(AppConstants.prefDriverPhone),
+      _prefs.remove(AppConstants.prefDriverLicenseNumber),
+      _prefs.remove(AppConstants.prefDriverVehiclePlate),
+      _prefs.remove(AppConstants.prefDriverCompanyName),
+      _prefs.remove(AppConstants.prefDriverEmergencyContact),
+      _prefs.remove(AppConstants.prefDriverAvatarUrl),
       _prefs.remove(AppConstants.prefDriverUsername),
       _prefs.remove(AppConstants.prefDriverRole),
+      _prefs.remove(AppConstants.prefAlertSoundEnabled),
+      _prefs.remove(AppConstants.prefVibrationEnabled),
+      _prefs.remove(AppConstants.prefDetectionInterval),
+      _prefs.remove(AppConstants.prefNotificationsEnabled),
     ]);
+
+    final navigator = SavApp.appNavigatorKey.currentState;
+    if (navigator == null || !navigator.mounted) {
+      return;
+    }
+
+    navigator.pushNamedAndRemoveUntil(Routes.loginView, (route) => false);
   }
 }

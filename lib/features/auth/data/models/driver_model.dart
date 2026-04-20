@@ -8,6 +8,7 @@ class DriverModel {
   final String vehiclePlate;
   final String? companyName;
   final String? emergencyContact;
+  final String? avatarUrl;
   final DateTime createdAt;
   final Map<String, dynamic>? statistics;
 
@@ -19,6 +20,7 @@ class DriverModel {
     required this.vehiclePlate,
     this.companyName,
     this.emergencyContact,
+    this.avatarUrl,
     required this.createdAt,
     this.statistics,
   });
@@ -32,6 +34,7 @@ class DriverModel {
       vehiclePlate: map['vehiclePlate'] ?? '',
       companyName: map['companyName'],
       emergencyContact: map['emergencyContact'],
+      avatarUrl: map['avatarUrl'] ?? map['avatar_url'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       statistics: map['statistics'] as Map<String, dynamic>?,
     );
@@ -45,6 +48,7 @@ class DriverModel {
       'vehiclePlate': vehiclePlate,
       'companyName': companyName,
       'emergencyContact': emergencyContact,
+      'avatarUrl': avatarUrl,
       'createdAt': Timestamp.fromDate(createdAt),
       'statistics': statistics,
     };
@@ -58,6 +62,7 @@ class DriverModel {
     String? vehiclePlate,
     String? companyName,
     String? emergencyContact,
+    String? avatarUrl,
     DateTime? createdAt,
     Map<String, dynamic>? statistics,
   }) {
@@ -69,6 +74,7 @@ class DriverModel {
       vehiclePlate: vehiclePlate ?? this.vehiclePlate,
       companyName: companyName ?? this.companyName,
       emergencyContact: emergencyContact ?? this.emergencyContact,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       createdAt: createdAt ?? this.createdAt,
       statistics: statistics ?? this.statistics,
     );

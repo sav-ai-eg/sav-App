@@ -8,6 +8,10 @@ class AuthUserModel extends AuthUserEntity {
     required super.firstName,
     required super.lastName,
     required super.email,
+    super.phoneNumber,
+    super.licenseNumber,
+    super.emergencyContactPhone,
+    super.avatarUrl,
   });
 
   factory AuthUserModel.fromMap(Map<String, dynamic> map) {
@@ -18,6 +22,10 @@ class AuthUserModel extends AuthUserEntity {
       firstName: (map['first_name'] ?? '').toString(),
       lastName: (map['last_name'] ?? '').toString(),
       email: (map['email'] ?? '').toString(),
+      phoneNumber: (map['phone_number'] ?? '').toString(),
+      licenseNumber: (map['license_number'] ?? '').toString(),
+      emergencyContactPhone: (map['emergency_contact_phone'] ?? '').toString(),
+      avatarUrl: (map['avatar_url'] ?? map['avatarUrl'] ?? '').toString(),
     );
   }
 

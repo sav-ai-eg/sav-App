@@ -42,6 +42,7 @@ class AppConstants {
   static const String prefDriverVehiclePlate = 'driverVehiclePlate';
   static const String prefDriverCompanyName = 'driverCompanyName';
   static const String prefDriverEmergencyContact = 'driverEmergencyContact';
+  static const String prefDriverAvatarUrl = 'driverAvatarUrl';
   static const String prefDriverUsername = 'driverUsername';
   static const String prefDriverRole = 'driverRole';
   static const String prefNotificationsEnabled = 'notificationsEnabled';

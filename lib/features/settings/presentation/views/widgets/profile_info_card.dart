@@ -6,12 +6,10 @@ import 'package:sav/features/auth/data/models/driver_model.dart';
 
 class ProfileInfoCard extends StatelessWidget {
   final DriverModel driver;
-  final VoidCallback? onEdit;
 
   const ProfileInfoCard({
     super.key,
     required this.driver,
-    this.onEdit,
   });
 
   @override
@@ -37,22 +35,6 @@ class ProfileInfoCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          if (onEdit != null)
-            Align(
-              alignment: Alignment.topRight,
-              child: InkWell(
-                onTap: onEdit,
-                borderRadius: BorderRadius.circular(999.r),
-                child: Padding(
-                  padding: EdgeInsets.all(4.w),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    size: 22.sp,
-                    color: AppColors.primaryColor,
-                  ),
-                ),
-              ),
-            ),
           Row(
             children: [
               // Avatar with orange border
@@ -67,14 +49,7 @@ class ProfileInfoCard extends StatelessWidget {
                   ),
                 ),
                 child: ClipOval(
-                  child: Container(
-                    color: AppColors.scaffoldColor,
-                    child: Icon(
-                      Icons.person,
-                      size: 40.sp,
-                      color: AppColors.grayColor,
-                    ),
-                  ),
+                  child: _ProfileImage(avatarUrl: driver.avatarUrl),
                 ),
               ),
               SizedBox(width: 13.w),
@@ -119,6 +94,55 @@ class ProfileInfoCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ProfileImage extends StatelessWidget {
+  final String? avatarUrl;
+
+  const _ProfileImage({required this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final source = avatarUrl?.trim() ?? '';
+
+    if (source.isEmpty) {
+      return _fallback();
+    }
+
+    return Image.network(
+      source,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _fallback(),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) {
+          return child;
+        }
+        return _fallback(isLoading: true);
+      },
+    );
+  }
+
+  Widget _fallback({bool isLoading = false}) {
+    return Container(
+      color: AppColors.scaffoldColor,
+      child: isLoading
+          ? Center(
+              child: SizedBox(
+                width: 18.w,
+                height: 18.w,
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+            )
+          : Icon(
+              Icons.person,
+              size: 40.sp,
+              color: AppColors.grayColor,
+            ),
     );
   }
 }

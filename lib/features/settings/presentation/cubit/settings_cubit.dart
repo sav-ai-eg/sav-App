@@ -70,78 +70,6 @@ class SettingsCubit extends Cubit<SettingsState> {
     }
   }
 
-  Future<String?> updateProfile({
-    required String name,
-    required String phone,
-    required String licenseNumber,
-    required String vehiclePlate,
-    String? companyName,
-    String? emergencyContact,
-  }) async {
-    final currentState = state;
-    if (currentState is! SettingsLoaded) {
-      return 'Settings are not ready yet.';
-    }
-
-    final trimmedName = name.trim();
-    final trimmedPhone = phone.trim();
-    final trimmedLicenseNumber = licenseNumber.trim();
-    final trimmedVehiclePlate = vehiclePlate.trim();
-    final normalizedCompanyName = companyName?.trim() ?? '';
-    final normalizedEmergencyContact = emergencyContact?.trim() ?? '';
-
-    if (trimmedName.isEmpty) {
-      return 'Driver name is required.';
-    }
-    if (trimmedPhone.isEmpty) {
-      return 'Phone number is required.';
-    }
-    if (trimmedLicenseNumber.isEmpty) {
-      return 'License number is required.';
-    }
-    if (trimmedVehiclePlate.isEmpty) {
-      return 'Vehicle plate is required.';
-    }
-
-    emit(currentState.copyWith(isSavingProfile: true));
-
-    try {
-      final driverId = currentState.driver.id.trim();
-
-      final updatedDriver = currentState.driver.copyWith(
-        name: trimmedName,
-        phone: trimmedPhone,
-        licenseNumber: trimmedLicenseNumber,
-        vehiclePlate: trimmedVehiclePlate,
-        companyName:
-            normalizedCompanyName.isEmpty ? null : normalizedCompanyName,
-        emergencyContact: normalizedEmergencyContact.isEmpty
-            ? null
-            : normalizedEmergencyContact,
-      );
-
-      if (driverId.isNotEmpty) {
-        await _firestoreService.saveDriver(
-          driverId: driverId,
-          data: updatedDriver.toMap(),
-        );
-      }
-
-      await _cacheDriverProfile(updatedDriver);
-
-      emit(
-        currentState.copyWith(
-          driver: updatedDriver,
-          isSavingProfile: false,
-        ),
-      );
-      return null;
-    } catch (_) {
-      emit(currentState.copyWith(isSavingProfile: false));
-      return 'Unable to update profile right now. Please try again.';
-    }
-  }
-
   Future<void> setAlertSoundEnabled(bool enabled) async {
     final currentState = state;
     if (currentState is! SettingsLoaded) {
@@ -275,6 +203,11 @@ class SettingsCubit extends Cubit<SettingsState> {
                   .isEmpty
               ? null
               : _prefs.getString(AppConstants.prefDriverEmergencyContact),
+      avatarUrl: (_prefs.getString(AppConstants.prefDriverAvatarUrl) ?? '')
+          .trim()
+          .isEmpty
+        ? null
+        : _prefs.getString(AppConstants.prefDriverAvatarUrl),
       createdAt: DateTime.now(),
     );
   }
@@ -297,6 +230,10 @@ class SettingsCubit extends Cubit<SettingsState> {
     await _prefs.setString(
       AppConstants.prefDriverEmergencyContact,
       driver.emergencyContact ?? '',
+    );
+    await _prefs.setString(
+      AppConstants.prefDriverAvatarUrl,
+      driver.avatarUrl ?? '',
     );
   }
 

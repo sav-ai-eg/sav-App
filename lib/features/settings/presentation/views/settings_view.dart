@@ -102,10 +102,13 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
   @override
   Widget build(BuildContext context) {
+    final settingsCubit = context.read<SettingsCubit>();
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldColor,
       body: SafeArea(
         child: BlocBuilder<SettingsCubit, SettingsState>(
+          bloc: settingsCubit,
           builder: (context, state) {
             if (state is SettingsLoading || state is SettingsInitial) {
               return const Center(
@@ -156,7 +159,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
         SizedBox(height: 24.h),
         Center(
           child: Text(
-            'Profile & Settings',
+            'Setting & Info',
             style: GoogleFonts.inter(
               fontSize: 24.sp,
               fontWeight: FontWeight.w600,
@@ -169,7 +172,6 @@ class _SettingsBodyState extends State<_SettingsBody> {
         _SessionHeaderCard(
           username: state.username,
           role: normalizedRole,
-          hasValidSession: state.hasValidSession,
         ),
         SizedBox(height: 16.h),
 
@@ -179,10 +181,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
           fontWeight: FontWeight.w400,
         ),
         SizedBox(height: 8.h),
-        ProfileInfoCard(
-          driver: driver,
-          onEdit: () => _showEditProfileSheet(state),
-        ),
+        ProfileInfoCard(driver: driver),
         if (hasCompany || hasEmergency) ...[
           SizedBox(height: 8.h),
           _ExtendedProfileCard(
@@ -303,199 +302,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
     );
   }
 
-  Future<void> _showEditProfileSheet(SettingsLoaded state) async {
-    final nameController = TextEditingController(text: state.driver.name);
-    final phoneController = TextEditingController(text: state.driver.phone);
-    final licenseController =
-        TextEditingController(text: state.driver.licenseNumber);
-    final plateController = TextEditingController(text: state.driver.vehiclePlate);
-    final companyController =
-        TextEditingController(text: state.driver.companyName ?? '');
-    final emergencyController =
-        TextEditingController(text: state.driver.emergencyContact ?? '');
-    final formKey = GlobalKey<FormState>();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return BlocBuilder<SettingsCubit, SettingsState>(
-          builder: (context, latestState) {
-            final isSaving =
-                latestState is SettingsLoaded && latestState.isSavingProfile;
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.whiteColor,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-                ),
-                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 44.w,
-                            height: 4.h,
-                            decoration: BoxDecoration(
-                              color: AppColors.grayColor.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(999.r),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 14.h),
-                        Text(
-                          'Edit Profile',
-                          style: GoogleFonts.inter(
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(height: 14.h),
-                        _FormField(
-                          controller: nameController,
-                          label: 'Full Name',
-                          validator: _requiredValidator,
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 10.h),
-                        _FormField(
-                          controller: phoneController,
-                          label: 'Phone Number',
-                          keyboardType: TextInputType.phone,
-                          validator: _requiredValidator,
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 10.h),
-                        _FormField(
-                          controller: licenseController,
-                          label: 'License Number',
-                          validator: _requiredValidator,
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 10.h),
-                        _FormField(
-                          controller: plateController,
-                          label: 'Vehicle Plate',
-                          validator: _requiredValidator,
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 10.h),
-                        _FormField(
-                          controller: companyController,
-                          label: 'Company (Optional)',
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 10.h),
-                        _FormField(
-                          controller: emergencyController,
-                          label: 'Emergency Contact (Optional)',
-                          keyboardType: TextInputType.phone,
-                          enabled: !isSaving,
-                        ),
-                        SizedBox(height: 18.h),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: isSaving
-                                ? null
-                                : () async {
-                                    final isValid =
-                                        formKey.currentState?.validate() ?? false;
-                                    if (!isValid) {
-                                      return;
-                                    }
-
-                                    final settingsCubit =
-                                      this.context.read<SettingsCubit>();
-                                    final failureMessage =
-                                      await settingsCubit.updateProfile(
-                                              name: nameController.text,
-                                              phone: phoneController.text,
-                                              licenseNumber: licenseController.text,
-                                              vehiclePlate: plateController.text,
-                                              companyName: companyController.text,
-                                              emergencyContact:
-                                                  emergencyController.text,
-                                            );
-
-                                    if (!mounted) {
-                                      return;
-                                    }
-
-                                    if (failureMessage != null &&
-                                        failureMessage.trim().isNotEmpty) {
-                                      SavDialog.showError(
-                                        this.context,
-                                        failureMessage,
-                                      );
-                                      return;
-                                    }
-
-                                    if (sheetContext.mounted) {
-                                      Navigator.of(sheetContext).pop();
-                                    }
-                                    SavDialog.showSuccess(
-                                      this.context,
-                                      'Profile updated successfully.',
-                                    );
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryColor,
-                              foregroundColor: AppColors.whiteColor,
-                              padding: EdgeInsets.symmetric(vertical: 14.h),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12.r),
-                              ),
-                            ),
-                            child: isSaving
-                                ? SizedBox(
-                                    width: 16.w,
-                                    height: 16.w,
-                                    child: const CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.whiteColor,
-                                    ),
-                                  )
-                                : Text(
-                                    'Save Changes',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14.sp,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    nameController.dispose();
-    phoneController.dispose();
-    licenseController.dispose();
-    plateController.dispose();
-    companyController.dispose();
-    emergencyController.dispose();
-  }
-
   Future<void> _showTripSettingsSheet(SettingsLoaded state) async {
     int selectedInterval = state.detectionIntervalMs;
+    final settingsCubit = context.read<SettingsCubit>();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -578,8 +387,6 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
-                        final settingsCubit =
-                            context.read<SettingsCubit>();
                         await settingsCubit.setDetectionIntervalMs(
                           selectedInterval,
                         );
@@ -616,6 +423,8 @@ class _SettingsBodyState extends State<_SettingsBody> {
   }
 
   Future<void> _showAppPreferencesSheet() async {
+    final settingsCubit = context.read<SettingsCubit>();
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.whiteColor,
@@ -624,6 +433,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
       ),
       builder: (sheetContext) {
         return BlocBuilder<SettingsCubit, SettingsState>(
+          bloc: settingsCubit,
           builder: (context, state) {
             if (state is! SettingsLoaded) {
               return const SizedBox.shrink();
@@ -652,7 +462,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     activeTrackColor:
                       AppColors.primaryColor.withValues(alpha: 0.4),
                     onChanged: (value) =>
-                        context.read<SettingsCubit>().setAlertSoundEnabled(value),
+                        settingsCubit.setAlertSoundEnabled(value),
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
@@ -663,7 +473,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     activeTrackColor:
                       AppColors.primaryColor.withValues(alpha: 0.4),
                     onChanged: (value) =>
-                        context.read<SettingsCubit>().setVibrationEnabled(value),
+                        settingsCubit.setVibrationEnabled(value),
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
@@ -674,7 +484,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     activeTrackColor:
                       AppColors.primaryColor.withValues(alpha: 0.4),
                     onChanged: (value) =>
-                        context.read<SettingsCubit>().setNotificationsEnabled(value),
+                        settingsCubit.setNotificationsEnabled(value),
                   ),
                 ],
               ),
@@ -902,12 +712,6 @@ class _SettingsBodyState extends State<_SettingsBody> {
     context.pushAndRemoveUntilWithNamed(Routes.loginView);
   }
 
-  String? _requiredValidator(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'This field is required';
-    }
-    return null;
-  }
 }
 
 class _SettingsErrorState extends StatelessWidget {
@@ -960,12 +764,10 @@ class _SettingsErrorState extends StatelessWidget {
 class _SessionHeaderCard extends StatelessWidget {
   final String username;
   final String role;
-  final bool hasValidSession;
 
   const _SessionHeaderCard({
     required this.username,
     required this.role,
-    required this.hasValidSession,
   });
 
   @override
@@ -1023,23 +825,6 @@ class _SessionHeaderCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: hasValidSession
-                  ? AppColors.successColor.withValues(alpha: 0.12)
-                  : AppColors.errorColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(999.r),
-            ),
-            child: Text(
-              hasValidSession ? 'Logged In' : 'Session Expired',
-              style: GoogleFonts.inter(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w600,
-                color: hasValidSession ? AppColors.successColor : AppColors.errorColor,
-              ),
             ),
           ),
         ],
@@ -1337,45 +1122,3 @@ class _SupportActionTile extends StatelessWidget {
   }
 }
 
-class _FormField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String? Function(String?)? validator;
-  final TextInputType keyboardType;
-  final bool enabled;
-
-  const _FormField({
-    required this.controller,
-    required this.label,
-    this.validator,
-    this.keyboardType = TextInputType.text,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      validator: validator,
-      keyboardType: keyboardType,
-      enabled: enabled,
-      style: GoogleFonts.inter(fontSize: 14.sp),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.inter(
-          fontSize: 13.sp,
-          color: AppColors.grayColor,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.r),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.r),
-          borderSide: const BorderSide(
-            color: AppColors.primaryColor,
-          ),
-        ),
-      ),
-    );
-  }
-}

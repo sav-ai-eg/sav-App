@@ -16,6 +16,16 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       _prefs.setString(AppConstants.prefRefreshToken, session.refreshToken),
       _prefs.setString(AppConstants.prefDriverId, session.user.id.toString()),
       _prefs.setString(AppConstants.prefDriverName, session.user.displayName),
+      _prefs.setString(AppConstants.prefDriverPhone, session.user.phoneNumber),
+      _prefs.setString(
+        AppConstants.prefDriverLicenseNumber,
+        session.user.licenseNumber,
+      ),
+      _prefs.setString(
+        AppConstants.prefDriverEmergencyContact,
+        session.user.emergencyContactPhone,
+      ),
+      _prefs.setString(AppConstants.prefDriverAvatarUrl, session.user.avatarUrl),
       _prefs.setString(AppConstants.prefDriverUsername, session.user.username),
       _prefs.setString(AppConstants.prefDriverRole, session.user.role),
     ];
@@ -43,6 +53,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       _prefs.remove(AppConstants.prefDriverVehiclePlate),
       _prefs.remove(AppConstants.prefDriverCompanyName),
       _prefs.remove(AppConstants.prefDriverEmergencyContact),
+      _prefs.remove(AppConstants.prefDriverAvatarUrl),
       _prefs.remove(AppConstants.prefDriverUsername),
       _prefs.remove(AppConstants.prefDriverRole),
       _prefs.remove(AppConstants.prefAlertSoundEnabled),

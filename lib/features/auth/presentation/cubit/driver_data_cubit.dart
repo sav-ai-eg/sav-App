@@ -68,6 +68,7 @@ class DriverDataCubit extends Cubit<DriverDataState> {
         AppConstants.prefDriverEmergencyContact,
         emergencyContact ?? '',
       );
+      await _prefs.setString(AppConstants.prefDriverAvatarUrl, '');
 
       emit(DriverDataSaved(driver: driver));
     } catch (e) {
