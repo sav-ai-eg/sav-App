@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
+import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/trip_slide_action.dart';
 
@@ -34,6 +35,7 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   GoogleMapController? _mapController;
   late AnimationController _alertAnimController;
   late Animation<double> _alertOpacity;
+  bool _isProcessingAction = false;
 
   @override
   void initState() {
@@ -141,6 +143,21 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                   children: [
                     _TripStatusChip(status: state.detectionStatus),
                     const Spacer(),
+                    IconButton(
+                      onPressed: widget.isEnding || _isProcessingAction
+                          ? null
+                          : _showEventsTimeline,
+                      style: IconButton.styleFrom(
+                        backgroundColor:
+                            AppColors.darkGrayColor.withValues(alpha: 0.74),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: Icon(
+                        Icons.timeline_rounded,
+                        size: 18.sp,
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
                     _DarkGlassChip(
                       icon: Icons.timer_outlined,
                       label: _formatDuration(_elapsed),
@@ -209,6 +226,9 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
             state: state,
             elapsed: _elapsed,
             isEnding: widget.isEnding,
+            actionBusy: _isProcessingAction || state.isActionInProgress,
+            onPauseResume: _handlePauseResume,
+            onCancelTrip: _handleCancelTrip,
             onSlideToEnd: () => _confirmEndTrip(context),
           ),
         ),
@@ -352,6 +372,10 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   }
 
   Future<bool> _confirmEndTrip(BuildContext context) async {
+    if (_isProcessingAction) {
+      return false;
+    }
+
     final confirmed = await SavDialog.confirm(
       context,
       title: 'End trip?',
@@ -369,6 +393,256 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     return true;
   }
 
+  Future<void> _handlePauseResume() async {
+    if (_isProcessingAction || widget.isEnding) {
+      return;
+    }
+
+    final isStarted = widget.state.trip.isStarted;
+    final confirmed = await SavDialog.confirm(
+      context,
+      title: isStarted ? 'Pause trip?' : 'Resume trip?',
+      message: isStarted
+          ? 'Trip tracking will be paused until you resume.'
+          : 'Trip tracking will continue from your current location.',
+      confirmText: isStarted ? 'Pause' : 'Resume',
+      icon: isStarted
+          ? Icons.pause_circle_outline_rounded
+          : Icons.play_circle_outline_rounded,
+      confirmColor: AppColors.primaryColor,
+    );
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = true;
+    });
+
+    final cubit = context.read<TripCubit>();
+    if (isStarted) {
+      await cubit.pauseTrip();
+    } else {
+      await cubit.resumeTrip();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = false;
+    });
+  }
+
+  Future<void> _handleCancelTrip() async {
+    if (_isProcessingAction || widget.isEnding) {
+      return;
+    }
+
+    final confirmed = await SavDialog.confirm(
+      context,
+      title: 'Cancel trip?',
+      message: 'This will cancel the current trip and stop all tracking.',
+      confirmText: 'Cancel Trip',
+      icon: Icons.cancel_rounded,
+      confirmColor: AppColors.errorColor,
+    );
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = true;
+    });
+
+    await context.read<TripCubit>().cancelTrip();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = false;
+    });
+  }
+
+  Future<void> _showEventsTimeline() async {
+    if (_isProcessingAction || widget.isEnding) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = true;
+    });
+
+    try {
+      final events = await context.read<TripCubit>().loadActiveTripEvents();
+
+      if (!mounted) {
+        return;
+      }
+
+      final currentContext = context;
+
+      if (events.isEmpty) {
+        ScaffoldMessenger.of(currentContext).showSnackBar(
+          const SnackBar(
+            content: Text('No timeline events yet.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      await showModalBottomSheet<void>(
+        context: currentContext,
+        isScrollControlled: true,
+        backgroundColor: AppColors.whiteColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+        ),
+        builder: (sheetContext) {
+          return SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56.w,
+                    height: 4.h,
+                    decoration: BoxDecoration(
+                      color: AppColors.lightGrayColor,
+                      borderRadius: BorderRadius.circular(999.r),
+                    ),
+                  ),
+                  SizedBox(height: 16.h),
+                  Text(
+                    'Trip Timeline',
+                    style: GoogleFonts.inter(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimaryColor,
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: events.length,
+                      separatorBuilder: (_, __) => Divider(
+                        color: AppColors.lightGrayColor.withValues(alpha: 0.7),
+                        height: 1,
+                      ),
+                      itemBuilder: (_, index) {
+                        final event = events[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4.w,
+                            vertical: 4.h,
+                          ),
+                          leading: Icon(
+                            _eventIcon(event.eventType),
+                            color: AppColors.primaryColor,
+                          ),
+                          title: Text(
+                            _eventTitle(event.eventType),
+                            style: GoogleFonts.inter(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimaryColor,
+                            ),
+                          ),
+                          subtitle: Text(
+                            _eventSubtitle(event),
+                            style: GoogleFonts.inter(
+                              fontSize: 12.sp,
+                              color: AppColors.textSecondaryColor,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      SavDialog.showError(
+        context,
+        error.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingAction = false;
+        });
+      }
+    }
+  }
+
+  IconData _eventIcon(String eventType) {
+    switch (eventType.trim().toLowerCase()) {
+      case 'started':
+        return Icons.play_circle_outline_rounded;
+      case 'stopped':
+        return Icons.pause_circle_outline_rounded;
+      case 'resumed':
+        return Icons.play_arrow_rounded;
+      case 'finished':
+        return Icons.task_alt_rounded;
+      case 'cancelled':
+        return Icons.cancel_rounded;
+      case 'location_updated':
+        return Icons.my_location_rounded;
+      default:
+        return Icons.timeline_rounded;
+    }
+  }
+
+  String _eventTitle(String eventType) {
+    final normalized = eventType.trim().toLowerCase();
+    switch (normalized) {
+      case 'started':
+        return 'Trip started';
+      case 'stopped':
+        return 'Trip paused';
+      case 'resumed':
+        return 'Trip resumed';
+      case 'finished':
+        return 'Trip finished';
+      case 'cancelled':
+        return 'Trip cancelled';
+      case 'location_updated':
+        return 'Location updated';
+      default:
+        return normalized.replaceAll('_', ' ');
+    }
+  }
+
+  String _eventSubtitle(TripEventEntity event) {
+    final timestamp = event.createdAt.toLocal();
+    final hh = timestamp.hour.toString().padLeft(2, '0');
+    final mm = timestamp.minute.toString().padLeft(2, '0');
+    final date =
+        '${timestamp.day.toString().padLeft(2, '0')}/${timestamp.month.toString().padLeft(2, '0')}/${timestamp.year}';
+    final notes = (event.notes ?? '').trim();
+    if (notes.isEmpty) {
+      return '$date  $hh:$mm';
+    }
+    return '$date  $hh:$mm  -  $notes';
+  }
+
   String _formatDuration(Duration duration) {
     final hours = duration.inHours.toString().padLeft(2, '0');
     final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
@@ -381,12 +655,18 @@ class _ActiveTripPanel extends StatelessWidget {
   final TripActive state;
   final Duration elapsed;
   final bool isEnding;
+  final bool actionBusy;
+  final Future<void> Function() onPauseResume;
+  final Future<void> Function() onCancelTrip;
   final Future<bool> Function() onSlideToEnd;
 
   const _ActiveTripPanel({
     required this.state,
     required this.elapsed,
     required this.isEnding,
+    required this.actionBusy,
+    required this.onPauseResume,
+    required this.onCancelTrip,
     required this.onSlideToEnd,
   });
 
@@ -497,11 +777,42 @@ class _ActiveTripPanel extends StatelessWidget {
                 ],
               ),
               SizedBox(height: 18.h),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isEnding || actionBusy ? null : onPauseResume,
+                      icon: Icon(
+                        state.trip.isStarted
+                            ? Icons.pause_circle_outline_rounded
+                            : Icons.play_circle_outline_rounded,
+                        size: 18.sp,
+                      ),
+                      label: Text(state.trip.isStarted ? 'Pause' : 'Resume'),
+                    ),
+                  ),
+                  SizedBox(width: 10.w),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isEnding || actionBusy ? null : onCancelTrip,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.errorColor,
+                        side: const BorderSide(color: AppColors.errorColor),
+                      ),
+                      icon: Icon(Icons.cancel_rounded, size: 18.sp),
+                      label: const Text('Cancel'),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12.h),
               TripSlideAction(
                 label: 'Slide to end',
                 icon: Icons.chevron_right_rounded,
                 isLoading: isEnding,
-                onSubmit: onSlideToEnd,
+                onSubmit: actionBusy
+                    ? () async => false
+                    : onSlideToEnd,
               ),
             ],
           ),

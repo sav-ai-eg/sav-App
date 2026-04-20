@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/di/injection.dart';
+import 'package:sav/core/widgets/sav_components.dart';
 import 'package:sav/features/history/presentation/cubit/history_cubit.dart';
 import 'package:sav/features/history/presentation/views/widgets/history_empty_widget.dart';
 import 'package:sav/features/history/presentation/views/widgets/history_search_bar.dart';
@@ -63,6 +64,13 @@ class _HistoryBody extends StatelessWidget {
                       );
                     }
 
+                    if (state is HistoryError) {
+                      return SeenErrorWidget(
+                        message: state.message,
+                        onRetry: () => context.read<HistoryCubit>().loadHistory(),
+                      );
+                    }
+
                     return Column(
                       children: [
                         /// Search bar
@@ -90,7 +98,13 @@ class _HistoryBody extends StatelessWidget {
                             ),
                           )
                         else
-                          const Expanded(child: HistoryEmptyWidget()),
+                          Expanded(
+                            child: HistoryEmptyWidget(
+                              message: state is HistoryEmpty
+                                  ? state.message
+                                  : 'No history found yet.',
+                            ),
+                          ),
                       ],
                     );
                   },

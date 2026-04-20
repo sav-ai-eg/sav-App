@@ -25,7 +25,7 @@ class TripLoading extends TripState {
 
 /// Main active trip state — contains all real-time data.
 class TripActive extends TripState {
-  final TripModel trip;
+  final TripEntity trip;
   final DetectionStatus detectionStatus;
   final int alertCount;
   final int drowsinessAlerts;
@@ -38,6 +38,7 @@ class TripActive extends TripState {
   final bool isCameraReady;
   final bool isOnline;
   final int pendingSyncCount;
+  final bool isActionInProgress;
 
   const TripActive({
     required this.trip,
@@ -53,10 +54,11 @@ class TripActive extends TripState {
     this.isCameraReady = false,
     this.isOnline = true,
     this.pendingSyncCount = 0,
+    this.isActionInProgress = false,
   });
 
   TripActive copyWith({
-    TripModel? trip,
+    TripEntity? trip,
     DetectionStatus? detectionStatus,
     int? alertCount,
     int? drowsinessAlerts,
@@ -69,6 +71,7 @@ class TripActive extends TripState {
     bool? isCameraReady,
     bool? isOnline,
     int? pendingSyncCount,
+    bool? isActionInProgress,
   }) {
     return TripActive(
       trip: trip ?? this.trip,
@@ -84,6 +87,7 @@ class TripActive extends TripState {
       isCameraReady: isCameraReady ?? this.isCameraReady,
       isOnline: isOnline ?? this.isOnline,
       pendingSyncCount: pendingSyncCount ?? this.pendingSyncCount,
+      isActionInProgress: isActionInProgress ?? this.isActionInProgress,
     );
   }
 
@@ -128,12 +132,14 @@ class TripEnded extends TripState {
   final String? distance;
   final int alertCount;
   final double awakePercentage;
+  final bool wasCancelled;
 
   const TripEnded({
     this.duration,
     this.distance,
     this.alertCount = 0,
     this.awakePercentage = 100.0,
+    this.wasCancelled = false,
   });
 }
 

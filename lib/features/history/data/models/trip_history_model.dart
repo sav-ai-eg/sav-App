@@ -1,18 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 
 class TripHistoryModel {
-  final String? id;
-  final String date;
-  final String from;
-  final String to;
-  final String duration;
-  final String distance;
-  final int alerts;
-  final String? status;
-  final DateTime? startTime;
-  final DateTime? endTime;
-
   const TripHistoryModel({
     this.id,
     required this.date,
@@ -25,6 +14,17 @@ class TripHistoryModel {
     this.startTime,
     this.endTime,
   });
+
+  final String? id;
+  final String date;
+  final String from;
+  final String to;
+  final String duration;
+  final String distance;
+  final int alerts;
+  final String? status;
+  final DateTime? startTime;
+  final DateTime? endTime;
 
   String get route => '$from to $to';
 
@@ -41,7 +41,7 @@ class TripHistoryModel {
   String get displayStatus {
     final normalized = status?.trim();
     if (normalized == null || normalized.isEmpty) {
-      return 'Completed';
+      return 'Finished';
     }
 
     return normalized
@@ -52,6 +52,29 @@ class TripHistoryModel {
               '${segment[0].toUpperCase()}${segment.substring(1).toLowerCase()}',
         )
         .join(' ');
+  }
+
+  factory TripHistoryModel.fromTripEntity(TripEntity trip) {
+    final formattedDate = DateFormat('dd MMM yyyy - h:mm a').format(
+      trip.startTime,
+    );
+
+    final duration = (trip.duration ?? '').trim().isNotEmpty
+        ? trip.duration!.trim()
+        : _durationFromSeconds(trip.durationSeconds);
+
+    return TripHistoryModel(
+      id: trip.id,
+      date: formattedDate,
+      from: trip.from,
+      to: trip.to,
+      duration: duration,
+      distance: (trip.distance ?? '').trim(),
+      alerts: trip.alerts,
+      status: trip.status,
+      startTime: trip.startTime,
+      endTime: trip.endTime,
+    );
   }
 
   static String _compactAddress(String value) {
@@ -79,48 +102,19 @@ class TripHistoryModel {
     return '$first, $trailing';
   }
 
-  factory TripHistoryModel.fromMap(Map<String, dynamic> map, String docId) {
-    final startTime = (map['startTime'] as Timestamp?)?.toDate();
-    final endTime = (map['endTime'] as Timestamp?)?.toDate();
-
-    String dateStr = map['date'] ?? '';
-    if (dateStr.isEmpty && startTime != null) {
-      dateStr = DateFormat('dd MMM yyyy - h:mm a').format(startTime);
+  static String _durationFromSeconds(int seconds) {
+    if (seconds <= 0) {
+      return '';
     }
 
-    String duration = map['duration'] ?? '';
-    if (duration.isEmpty && startTime != null && endTime != null) {
-      final diff = endTime.difference(startTime);
-      final hours = diff.inHours;
-      final minutes = diff.inMinutes % 60;
-      duration = '$hours h , $minutes min';
+    final totalMinutes = (seconds / 60).round();
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+
+    if (hours > 0) {
+      return '$hours h, $minutes min';
     }
 
-    return TripHistoryModel(
-      id: docId,
-      date: dateStr,
-      from: map['from'] ?? '',
-      to: map['to'] ?? '',
-      duration: duration,
-      distance: map['distance'] ?? '',
-      alerts: map['alerts'] ?? 0,
-      status: map['status'],
-      startTime: startTime,
-      endTime: endTime,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'date': date,
-      'from': from,
-      'to': to,
-      'duration': duration,
-      'distance': distance,
-      'alerts': alerts,
-      'status': status ?? 'completed',
-      if (startTime != null) 'startTime': Timestamp.fromDate(startTime!),
-      if (endTime != null) 'endTime': Timestamp.fromDate(endTime!),
-    };
+    return '$totalMinutes min';
   }
 }

@@ -47,6 +47,34 @@ import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_c
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart' as _i727;
 import 'package:sav/features/splash/presentation/cubit/splash_cubit.dart'
     as _i265;
+import 'package:sav/features/trip/data/datasources/trip_remote_data_source.dart'
+    as _i64;
+import 'package:sav/features/trip/data/datasources/trip_remote_data_source_impl.dart'
+    as _i841;
+import 'package:sav/features/trip/data/repositories/trip_repository_impl.dart'
+    as _i786;
+import 'package:sav/features/trip/domain/repositories/trip_repository.dart'
+    as _i389;
+import 'package:sav/features/trip/domain/usecases/cancel_trip_use_case.dart'
+    as _i669;
+import 'package:sav/features/trip/domain/usecases/create_trip_alert_use_case.dart'
+    as _i537;
+import 'package:sav/features/trip/domain/usecases/finish_trip_use_case.dart'
+    as _i498;
+import 'package:sav/features/trip/domain/usecases/load_current_trip_use_case.dart'
+    as _i324;
+import 'package:sav/features/trip/domain/usecases/load_driver_trip_history_use_case.dart'
+    as _i364;
+import 'package:sav/features/trip/domain/usecases/load_trip_events_use_case.dart'
+    as _i141;
+import 'package:sav/features/trip/domain/usecases/push_trip_location_use_case.dart'
+    as _i897;
+import 'package:sav/features/trip/domain/usecases/resume_trip_use_case.dart'
+    as _i748;
+import 'package:sav/features/trip/domain/usecases/start_trip_use_case.dart'
+    as _i872;
+import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart'
+    as _i133;
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart' as _i138;
 import 'package:shared_preferences/shared_preferences.dart' as _i460;
 
@@ -90,12 +118,6 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i460.SharedPreferences>(),
       ),
     );
-    gh.factory<_i249.HistoryCubit>(
-      () => _i249.HistoryCubit(
-        gh<_i811.FirestoreService>(),
-        gh<_i460.SharedPreferences>(),
-      ),
-    );
     gh.factory<_i265.SplashCubit>(
       () => _i265.SplashCubit(gh<_i460.SharedPreferences>()),
     );
@@ -106,20 +128,14 @@ extension GetItInjectableX on _i174.GetIt {
       () =>
           _i541.DioApiConsumer(gh<_i361.Dio>(), gh<_i460.SharedPreferences>()),
     );
-    gh.factory<_i138.TripCubit>(
-      () => _i138.TripCubit(
-        gh<_i811.FirestoreService>(),
-        gh<_i813.TfliteDetectionService>(),
-        gh<_i155.CameraService>(),
-        gh<_i176.LocationService>(),
-        gh<_i5.AlertService>(),
-        gh<_i789.OfflineCacheService>(),
-        gh<_i441.ConnectivityService>(),
-        gh<_i460.SharedPreferences>(),
-      ),
-    );
     gh.factory<_i799.HomeRemoteDataSource>(
       () => _i442.HomeRemoteDataSourceImpl(gh<_i741.ApiConsumer>()),
+    );
+    gh.factory<_i64.TripRemoteDataSource>(
+      () => _i841.TripRemoteDataSourceImpl(gh<_i741.ApiConsumer>()),
+    );
+    gh.factory<_i389.TripRepository>(
+      () => _i786.TripRepositoryImpl(gh<_i64.TripRemoteDataSource>()),
     );
     gh.factory<_i68.HomeRepository>(
       () => _i540.HomeRepositoryImpl(
@@ -129,11 +145,63 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i789.OfflineCacheService>(),
       ),
     );
+    gh.factory<_i669.CancelTripUseCase>(
+      () => _i669.CancelTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i537.CreateTripAlertUseCase>(
+      () => _i537.CreateTripAlertUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i498.FinishTripUseCase>(
+      () => _i498.FinishTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i324.LoadCurrentTripUseCase>(
+      () => _i324.LoadCurrentTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i364.LoadDriverTripHistoryUseCase>(
+      () => _i364.LoadDriverTripHistoryUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i141.LoadTripEventsUseCase>(
+      () => _i141.LoadTripEventsUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i897.PushTripLocationUseCase>(
+      () => _i897.PushTripLocationUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i748.ResumeTripUseCase>(
+      () => _i748.ResumeTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i872.StartTripUseCase>(
+      () => _i872.StartTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i133.StopTripUseCase>(
+      () => _i133.StopTripUseCase(gh<_i389.TripRepository>()),
+    );
+    gh.factory<_i249.HistoryCubit>(
+      () => _i249.HistoryCubit(gh<_i364.LoadDriverTripHistoryUseCase>()),
+    );
     gh.factory<_i193.LoadHomeDashboardUseCase>(
       () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),
     );
     gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
       () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
+    );
+    gh.factory<_i138.TripCubit>(
+      () => _i138.TripCubit(
+        gh<_i872.StartTripUseCase>(),
+        gh<_i324.LoadCurrentTripUseCase>(),
+        gh<_i897.PushTripLocationUseCase>(),
+        gh<_i133.StopTripUseCase>(),
+        gh<_i748.ResumeTripUseCase>(),
+        gh<_i498.FinishTripUseCase>(),
+        gh<_i669.CancelTripUseCase>(),
+        gh<_i141.LoadTripEventsUseCase>(),
+        gh<_i537.CreateTripAlertUseCase>(),
+        gh<_i813.TfliteDetectionService>(),
+        gh<_i155.CameraService>(),
+        gh<_i176.LocationService>(),
+        gh<_i5.AlertService>(),
+        gh<_i789.OfflineCacheService>(),
+        gh<_i441.ConnectivityService>(),
+      ),
     );
     gh.factory<_i727.HomeCubit>(
       () => _i727.HomeCubit(

@@ -23,6 +23,12 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      context.read<TripCubit>().restoreCurrentTrip();
+    });
   }
 
   @override
@@ -64,15 +70,16 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
 
             final shouldEndTrip = await SavDialog.confirm(
               context,
-              title: 'End trip?',
-              message: 'The current trip is still active.',
-              confirmText: 'End',
-              icon: Icons.stop_circle_rounded,
+              title: 'Cancel trip?',
+              message:
+                  'This will cancel the current trip session and stop tracking.',
+              confirmText: 'Cancel Trip',
+              icon: Icons.cancel_rounded,
               confirmColor: AppColors.errorColor,
             );
 
             if (shouldEndTrip && context.mounted) {
-              await context.read<TripCubit>().endTrip();
+              await context.read<TripCubit>().cancelTrip();
             }
           },
           child: Scaffold(
@@ -227,7 +234,7 @@ class _TripEndedContent extends StatelessWidget {
             ),
             SizedBox(height: 24.h),
             Text(
-              'Trip completed',
+              state.wasCancelled ? 'Trip cancelled' : 'Trip completed',
               style: GoogleFonts.inter(
                 fontSize: 22.sp,
                 fontWeight: FontWeight.w700,
@@ -236,7 +243,9 @@ class _TripEndedContent extends StatelessWidget {
             ),
             SizedBox(height: 12.h),
             Text(
-              'Your summary is saved and ready in history.',
+              state.wasCancelled
+                  ? 'Trip cancellation is saved and visible in history.'
+                  : 'Your summary is saved and ready in history.',
               style: GoogleFonts.inter(
                 fontSize: 14.sp,
                 fontWeight: FontWeight.w400,

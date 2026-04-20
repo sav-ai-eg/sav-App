@@ -13,7 +13,11 @@ class HistoryLoading extends HistoryState {
 }
 
 class HistoryEmpty extends HistoryState {
-  const HistoryEmpty();
+  const HistoryEmpty({
+    this.message = 'No history found yet. Start a new trip now!',
+  });
+
+  final String message;
 }
 
 class HistoryLoaded extends HistoryState {

@@ -4,7 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
 
 class HistoryEmptyWidget extends StatelessWidget {
-  const HistoryEmptyWidget({super.key});
+  const HistoryEmptyWidget({
+    super.key,
+    this.message = 'Start a new trip now !',
+  });
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +48,7 @@ class HistoryEmptyWidget extends StatelessWidget {
 
           /// Subtitle
           Text(
-            'Start a new trip now !',
+            message,
             style: GoogleFonts.inter(
               fontSize: 16.sp,
               fontWeight: FontWeight.w400,

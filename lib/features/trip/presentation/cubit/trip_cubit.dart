@@ -1,23 +1,29 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
-import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/errors/failures.dart';
 import 'package:sav/core/services/alert_service.dart';
 import 'package:sav/core/services/camera_service.dart';
 import 'package:sav/core/services/connectivity_service.dart';
-import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/tflite_detection_service.dart';
-import 'package:sav/features/trip/data/models/trip_model.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
-import 'package:uuid/uuid.dart';
+import 'package:sav/features/trip/domain/entities/trip_entity.dart';
+import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/usecases/cancel_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/create_trip_alert_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/finish_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_current_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_trip_events_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/push_trip_location_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/resume_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/start_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 part 'trip_state.dart';
@@ -25,32 +31,49 @@ part 'trip_state.dart';
 @injectable
 class TripCubit extends Cubit<TripState> {
   TripCubit(
-    this._firestoreService,
+    this._startTripUseCase,
+    this._loadCurrentTripUseCase,
+    this._pushTripLocationUseCase,
+    this._stopTripUseCase,
+    this._resumeTripUseCase,
+    this._finishTripUseCase,
+    this._cancelTripUseCase,
+    this._loadTripEventsUseCase,
+    this._createTripAlertUseCase,
     this._detectionService,
     this._cameraService,
     this._locationService,
     this._alertService,
     this._offlineCache,
     this._connectivity,
-    this._prefs,
   ) : super(const TripInitial()) {
     _connectivity.onConnectivityRestored = _onConnectivityRestored;
     _connectivity.onConnectivityLost = _onConnectivityLost;
   }
 
-  final FirestoreService _firestoreService;
+  final StartTripUseCase _startTripUseCase;
+  final LoadCurrentTripUseCase _loadCurrentTripUseCase;
+  final PushTripLocationUseCase _pushTripLocationUseCase;
+  final StopTripUseCase _stopTripUseCase;
+  final ResumeTripUseCase _resumeTripUseCase;
+  final FinishTripUseCase _finishTripUseCase;
+  final CancelTripUseCase _cancelTripUseCase;
+  final LoadTripEventsUseCase _loadTripEventsUseCase;
+  final CreateTripAlertUseCase _createTripAlertUseCase;
+
   final TfliteDetectionService _detectionService;
   final CameraService _cameraService;
   final LocationService _locationService;
   final AlertService _alertService;
   final OfflineCacheService _offlineCache;
   final ConnectivityService _connectivity;
-  final SharedPreferences _prefs;
 
-  TripModel? _activeTrip;
+  TripEntity? _activeTrip;
   Timer? _detectionTimer;
   Timer? _locationUpdateTimer;
   bool _isDetecting = false;
+  bool _isTransitioning = false;
+
   int _totalFrames = 0;
   int _safeFrames = 0;
   int _alertCount = 0;
@@ -60,55 +83,123 @@ class TripCubit extends Cubit<TripState> {
   Position? _lastPosition;
   DateTime? _lastAlertTime;
 
-  TripModel? get activeTrip => _activeTrip;
+  TripEntity? get activeTrip => _activeTrip;
   CameraService get cameraService => _cameraService;
+
   TripActive? get activeSnapshot =>
       _activeTrip == null ? null : _buildActiveState();
+
+  Future<void> restoreCurrentTrip() async {
+    if (_activeTrip != null || state is TripLoading || state is TripEnding) {
+      return;
+    }
+
+    final result = await _loadCurrentTripUseCase();
+    await result.fold(
+      (failure) async {
+        final message = _mapFailureMessage(failure);
+        if (_isSessionFailure(message)) {
+          emit(TripError(message: message));
+        }
+      },
+      (trip) async {
+        if (trip == null) {
+          return;
+        }
+
+        _activeTrip = trip;
+        _resetCounters();
+
+        await WakelockPlus.enable();
+        emit(
+          const TripLoading(
+            title: 'Resuming trip',
+            message: 'Restoring your active trip session.',
+          ),
+        );
+
+        await _initializeSubsystems(
+          initialLatitude: trip.currentLatitude ?? trip.fromLatitude,
+          initialLongitude: trip.currentLongitude ?? trip.fromLongitude,
+        );
+      },
+    );
+  }
 
   Future<void> startTrip({
     required TripPlaceModel from,
     required TripPlaceModel to,
   }) async {
-    if (_activeTrip != null || state is TripLoading || state is TripEnding) {
+    if (_activeTrip != null ||
+        state is TripLoading ||
+        state is TripEnding ||
+        _isTransitioning) {
+      return;
+    }
+
+    if (!_connectivity.isOnline) {
+      emit(
+        const TripError(
+          message: 'Internet connection is required to start a trip.',
+        ),
+      );
       return;
     }
 
     emit(
       const TripLoading(
         title: 'Preparing your trip',
-        message: 'Preparing route and sensors.',
+        message: 'Checking location and trip session.',
       ),
     );
 
     try {
-      final driverId = _prefs.getString(AppConstants.prefDriverId);
-      if (driverId == null || driverId.trim().isEmpty) {
+      final startPosition = await _locationService.getCurrentPosition();
+      final startLatitude = from.latitude ?? startPosition?.latitude;
+      final startLongitude = from.longitude ?? startPosition?.longitude;
+
+      if (startLatitude == null || startLongitude == null) {
         throw Exception(
-          'Driver not found. Please login first.',
+          'Unable to determine starting location. Please enable GPS and try again.',
         );
       }
 
-      final trip = TripModel(
-        id: const Uuid().v4(),
-        driverId: driverId,
-        from: from.fullText,
-        to: to.fullText,
-        fromPlaceId: from.placeId,
-        toPlaceId: to.placeId,
-        fromLatitude: from.latitude,
-        fromLongitude: from.longitude,
-        toLatitude: to.latitude,
-        toLongitude: to.longitude,
-        status: 'active',
-        startTime: DateTime.now(),
+      final result = await _startTripUseCase(
+        startAddress: from.fullText,
+        destinationAddress: to.fullText,
+        startLatitude: startLatitude,
+        startLongitude: startLongitude,
       );
 
-      _activeTrip = trip;
-      _resetCounters();
+      await result.fold(
+        (failure) async {
+          final message = _mapFailureMessage(failure);
+          if (_isActiveTripConflict(message)) {
+            await restoreCurrentTrip();
+                emit(
+                  const TripError(
+                    message:
+                        'You already have an active trip. Finish or cancel it before starting a new one.',
+                    keepNavigationHidden: true,
+                  ),
+                );
+            return;
+          }
 
-      await _persistTripStart(trip);
-      await WakelockPlus.enable();
-      await _initializeSubsystems();
+          emit(TripError(message: message));
+        },
+        (trip) async {
+          _activeTrip = trip;
+          _resetCounters();
+          _lastPosition = startPosition;
+
+          await WakelockPlus.enable();
+          await _initializeSubsystems(
+            initialLatitude: startLatitude,
+            initialLongitude: startLongitude,
+          );
+        },
+      );
     } catch (error) {
       _stopAllSubsystems();
       _activeTrip = null;
@@ -117,51 +208,192 @@ class TripCubit extends Cubit<TripState> {
     }
   }
 
-  Future<void> _persistTripStart(TripModel trip) async {
-    final payload = trip.toMap();
-
-    try {
-      if (_connectivity.isOnline) {
-        await _firestoreService.saveTrip(
-          driverId: trip.driverId,
-          tripId: trip.id,
-          data: payload,
-        );
-        return;
-      }
-    } catch (_) {
-      // Fall back to offline cache below.
+  Future<void> pauseTrip({String? notes}) async {
+    final trip = _activeTrip;
+    if (trip == null || !trip.isStarted || _isTransitioning) {
+      return;
     }
 
-    await _offlineCache.cacheAlert({
-      '_type': 'trip_start',
-      'tripId': trip.id,
-      'driverId': trip.driverId,
-      ...payload,
-    });
+    if (!_connectivity.isOnline) {
+      _emitActionError('Internet connection is required to pause the trip.');
+      return;
+    }
+
+    final snapshot = _buildActiveState(isActionInProgress: true);
+    emit(snapshot);
+
+    _isTransitioning = true;
+    final result = await _stopTripUseCase(
+      tripId: trip.tripIdOrZero,
+      latitude: _lastPosition?.latitude ?? snapshot.latitude,
+      longitude: _lastPosition?.longitude ?? snapshot.longitude,
+      notes: notes,
+    );
+    _isTransitioning = false;
+
+    result.fold(
+      (failure) {
+        _emitActionError(_mapFailureMessage(failure));
+        _updateActiveState(isActionInProgress: false);
+      },
+      (updatedTrip) {
+        _activeTrip = updatedTrip;
+        _detectionTimer?.cancel();
+        _updateActiveState(
+          detectionStatus: DetectionStatus.offline,
+          isActionInProgress: false,
+        );
+      },
+    );
   }
 
-  Future<void> _initializeSubsystems() async {
+  Future<void> resumeTrip({String? notes}) async {
+    final trip = _activeTrip;
+    if (trip == null || !trip.isStopped || _isTransitioning) {
+      return;
+    }
+
+    if (!_connectivity.isOnline) {
+      _emitActionError('Internet connection is required to resume the trip.');
+      return;
+    }
+
+    final snapshot = _buildActiveState(isActionInProgress: true);
+    emit(snapshot);
+
+    _isTransitioning = true;
+    final result = await _resumeTripUseCase(
+      tripId: trip.tripIdOrZero,
+      latitude: _lastPosition?.latitude ?? snapshot.latitude,
+      longitude: _lastPosition?.longitude ?? snapshot.longitude,
+      notes: notes,
+    );
+    _isTransitioning = false;
+
+    result.fold(
+      (failure) {
+        _emitActionError(_mapFailureMessage(failure));
+        _updateActiveState(isActionInProgress: false);
+      },
+      (updatedTrip) {
+        _activeTrip = updatedTrip;
+        if (_cameraService.isInitialized && _detectionService.isInitialized) {
+          _startDetectionLoop();
+        }
+        _updateActiveState(
+          detectionStatus: DetectionStatus.safe,
+          isActionInProgress: false,
+        );
+      },
+    );
+  }
+
+  Future<void> cancelTrip({String? notes}) async {
+    final trip = _activeTrip;
+    if (trip == null || _isTransitioning) {
+      return;
+    }
+
+    if (!_connectivity.isOnline) {
+      _emitActionError('Internet connection is required to cancel the trip.');
+      return;
+    }
+
+    final snapshot = _buildActiveState(isActionInProgress: true);
+    emit(snapshot);
+
+    _isTransitioning = true;
+    final result = await _cancelTripUseCase(
+      tripId: trip.tripIdOrZero,
+      endAddress: trip.to,
+      latitude: _lastPosition?.latitude ?? snapshot.latitude,
+      longitude: _lastPosition?.longitude ?? snapshot.longitude,
+      notes: notes,
+    );
+    _isTransitioning = false;
+
+    result.fold(
+      (failure) {
+        _emitActionError(_mapFailureMessage(failure));
+        _updateActiveState(isActionInProgress: false);
+      },
+      (updatedTrip) {
+        _activeTrip = updatedTrip;
+        _stopAllSubsystems();
+        final summary = _buildEndedState(wasCancelled: true);
+        _activeTrip = null;
+        _resetCounters();
+        emit(summary);
+      },
+    );
+  }
+
+  Future<List<TripEventEntity>> loadActiveTripEvents() async {
+    final tripId = _activeTrip?.tripIdOrZero ?? 0;
+    if (tripId <= 0) {
+      return const <TripEventEntity>[];
+    }
+
+    final result = await _loadTripEventsUseCase(tripId: tripId);
+    return result.fold(
+      (failure) => throw Exception(_mapFailureMessage(failure)),
+      (events) => events,
+    );
+  }
+
+  Future<void> _initializeSubsystems({
+    double? initialLatitude,
+    double? initialLongitude,
+  }) async {
     if (_activeTrip == null) {
       return;
     }
 
-    _emitLoadingStep('Starting camera...');
-    final cameraReady = await _cameraService.initialize();
+    var cameraReady = false;
+    var aiReady = false;
+    Position? position;
 
-    _emitLoadingStep('Loading AI...');
-    var aiReady = _detectionService.isInitialized;
-    if (!aiReady && cameraReady) {
-      aiReady = await _detectionService.initialize();
+    try {
+      _emitLoadingStep('Starting camera...');
+      cameraReady = await _cameraService.initialize();
+    } catch (error) {
+      debugPrint('Trip camera init failed: $error');
+      cameraReady = false;
     }
 
-    _emitLoadingStep('Getting location...');
-    final initialPosition = await _locationService.getCurrentPosition();
-    _lastPosition = initialPosition;
+    try {
+      _emitLoadingStep('Loading AI...');
+      aiReady = _detectionService.isInitialized;
+      if (!aiReady && cameraReady) {
+        aiReady = await _detectionService.initialize();
+      }
+    } catch (error) {
+      debugPrint('Trip AI init failed: $error');
+      aiReady = false;
+    }
+
+    try {
+      _emitLoadingStep('Getting location...');
+      position = await _locationService.getCurrentPosition();
+      _lastPosition = position;
+    } catch (error) {
+      debugPrint('Trip location init failed: $error');
+    }
 
     if (_activeTrip == null) {
       return;
     }
+
+    final latitude =
+        position?.latitude ??
+        initialLatitude ??
+        _activeTrip!.currentLatitude ??
+        _activeTrip!.fromLatitude;
+    final longitude =
+        position?.longitude ??
+        initialLongitude ??
+        _activeTrip!.currentLongitude ??
+        _activeTrip!.fromLongitude;
 
     emit(
       TripActive(
@@ -173,17 +405,21 @@ class TripCubit extends Cubit<TripState> {
         isCameraReady: cameraReady,
         isOnline: _connectivity.isOnline,
         pendingSyncCount: _offlineCache.totalPendingCount,
-        latitude: initialPosition?.latitude,
-        longitude: initialPosition?.longitude,
+        latitude: latitude,
+        longitude: longitude,
       ),
     );
 
-    if (cameraReady && aiReady) {
+    if (cameraReady && aiReady && (_activeTrip?.isStarted ?? false)) {
       _startDetectionLoop();
     }
 
     _startLocationTracking();
-    _startLocationFirestoreUpdates();
+    _startLocationBackendUpdates();
+
+    if (_connectivity.isOnline) {
+      unawaited(_syncPendingData());
+    }
   }
 
   void _emitLoadingStep(String message) {
@@ -200,6 +436,7 @@ class TripCubit extends Cubit<TripState> {
     _lastPosition = null;
     _lastAlertTime = null;
     _isDetecting = false;
+    _isTransitioning = false;
   }
 
   void _startDetectionLoop() {
@@ -213,6 +450,7 @@ class TripCubit extends Cubit<TripState> {
   Future<void> _runDetection() async {
     if (_isDetecting ||
         _activeTrip == null ||
+        !_activeTrip!.isStarted ||
         !_cameraService.isInitialized ||
         !_detectionService.isInitialized) {
       return;
@@ -255,7 +493,7 @@ class TripCubit extends Cubit<TripState> {
           _alertService.playYawnWarning();
         }
 
-        await _saveAlert(result);
+        await _saveAlert(result.alertType);
 
         final activeState = _buildActiveState(
           detectionStatus: result.isDrowsy
@@ -273,10 +511,12 @@ class TripCubit extends Cubit<TripState> {
           ),
         );
 
-        Future.delayed(const Duration(seconds: 3), () {
+        Future<void>.delayed(const Duration(seconds: 3), () {
           if (_activeTrip != null && state is TripDangerAlert) {
             _updateActiveState(
-              detectionStatus: DetectionStatus.safe,
+              detectionStatus: _activeTrip!.isStopped
+                  ? DetectionStatus.offline
+                  : DetectionStatus.safe,
               isAiReady: true,
               isCameraReady: true,
             );
@@ -288,7 +528,9 @@ class TripCubit extends Cubit<TripState> {
 
       _safeFrames++;
       _updateActiveState(
-        detectionStatus: DetectionStatus.safe,
+        detectionStatus: _activeTrip!.isStopped
+            ? DetectionStatus.offline
+            : DetectionStatus.safe,
         isAiReady: true,
         isCameraReady: true,
       );
@@ -299,45 +541,30 @@ class TripCubit extends Cubit<TripState> {
     }
   }
 
-  Future<void> _saveAlert(dynamic result) async {
-    if (_activeTrip == null) {
+  Future<void> _saveAlert(String alertType) async {
+    final tripId = _activeTrip?.tripIdOrZero ?? 0;
+    if (tripId <= 0) {
       return;
     }
 
-    final driverName =
-        _prefs.getString(AppConstants.prefDriverName) ?? 'Unknown Driver';
-
-    final alertData = {
-      'type': result.alertType,
-      'isDrowsy': result.isDrowsy,
-      'isYawning': result.isYawning,
-      'confidence': result.maxConfidence,
-      'tripId': _activeTrip!.id,
-      'driverId': _activeTrip!.driverId,
-      'driverName': driverName,
-      'detectedAt': DateTime.now().toIso8601String(),
-      'source': 'on_device',
-    };
-
     if (_connectivity.isOnline) {
-      try {
-        await _firestoreService.saveAlert(
-          driverId: _activeTrip!.driverId,
-          data: {...alertData, 'timestamp': FieldValue.serverTimestamp()},
-        );
-
-        await _firestoreService.incrementTripAlerts(
-          driverId: _activeTrip!.driverId,
-          tripId: _activeTrip!.id,
-          alertType: result.alertType,
-        );
+      final result = await _createTripAlertUseCase(
+        tripId: tripId,
+        alertType: alertType,
+      );
+      final isSynced = result.fold((_) => false, (_) => true);
+      if (isSynced) {
         return;
-      } catch (error) {
-        debugPrint('Alert sync failed, caching locally: $error');
       }
     }
 
-    await _offlineCache.cacheAlert(alertData);
+    await _offlineCache.cacheAlert(<String, dynamic>{
+      '_type': 'trip_alert',
+      'tripId': tripId,
+      'alertType': alertType,
+      'detectedAt': DateTime.now().toIso8601String(),
+    });
+
     _updateActiveState(pendingSyncCount: _offlineCache.totalPendingCount);
   }
 
@@ -348,7 +575,7 @@ class TripCubit extends Cubit<TripState> {
           return;
         }
 
-        if (_lastPosition != null) {
+        if (_lastPosition != null && (_activeTrip?.isStarted ?? false)) {
           final distance = _locationService.calculateDistance(
             _lastPosition!,
             position,
@@ -366,7 +593,7 @@ class TripCubit extends Cubit<TripState> {
     );
   }
 
-  void _startLocationFirestoreUpdates() {
+  void _startLocationBackendUpdates() {
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = Timer.periodic(
       AppConstants.tripLocationPushInterval,
@@ -375,31 +602,39 @@ class TripCubit extends Cubit<TripState> {
   }
 
   Future<void> _pushLocation() async {
-    if (_activeTrip == null || _lastPosition == null) {
+    final trip = _activeTrip;
+    if (trip == null || _lastPosition == null || !trip.isActive) {
       return;
     }
 
-    final locationData = {
-      'driverId': _activeTrip!.driverId,
-      'latitude': _lastPosition!.latitude,
-      'longitude': _lastPosition!.longitude,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
+    final tripId = trip.tripIdOrZero;
+    if (tripId <= 0) {
+      return;
+    }
+
+    final latitude = _lastPosition!.latitude;
+    final longitude = _lastPosition!.longitude;
 
     if (_connectivity.isOnline) {
-      try {
-        await _locationService.updateDriverLocation(
-          driverId: _activeTrip!.driverId,
-          latitude: _lastPosition!.latitude,
-          longitude: _lastPosition!.longitude,
-        );
+      final result = await _pushTripLocationUseCase(
+        tripId: tripId,
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      final synced = result.fold((_) => false, (_) => true);
+      if (synced) {
         return;
-      } catch (error) {
-        debugPrint('Location push failed, caching locally: $error');
       }
     }
 
-    await _offlineCache.cacheLocation(locationData);
+    await _offlineCache.cacheLocation(<String, dynamic>{
+      'tripId': tripId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'queuedAt': DateTime.now().toIso8601String(),
+    });
+
     _updateActiveState(pendingSyncCount: _offlineCache.totalPendingCount);
   }
 
@@ -408,7 +643,7 @@ class TripCubit extends Cubit<TripState> {
       isOnline: true,
       pendingSyncCount: _offlineCache.totalPendingCount,
     );
-    _syncPendingData();
+    unawaited(_syncPendingData());
   }
 
   void _onConnectivityLost() {
@@ -423,74 +658,53 @@ class TripCubit extends Cubit<TripState> {
     try {
       final alerts = await _offlineCache.drainAlerts();
       for (final rawAlert in alerts) {
-        final alert = Map<String, dynamic>.from(rawAlert);
-        final driverId = alert['driverId'] as String?;
-        if (driverId == null || driverId.trim().isEmpty) {
+        final item = Map<String, dynamic>.from(rawAlert);
+        final type = (item['_type'] ?? '').toString();
+
+        if (type != 'trip_alert') {
           continue;
         }
 
-        final internalType = alert.remove('_type') as String?;
-        final tripId = alert.remove('tripId') as String?;
+        final tripId = _toInt(item['tripId']);
+        final alertType = (item['alertType'] ?? '').toString().trim();
+        if (tripId <= 0 || alertType.isEmpty) {
+          continue;
+        }
 
-        try {
-          if (internalType == 'trip_start' && tripId != null) {
-            await _firestoreService.saveTrip(
-              driverId: driverId,
-              tripId: tripId,
-              data: alert,
-            );
-            continue;
-          }
+        final result = await _createTripAlertUseCase(
+          tripId: tripId,
+          alertType: alertType,
+        );
 
-          if (internalType == 'trip_end' && tripId != null) {
-            await _firestoreService.updateTrip(
-              driverId: driverId,
-              tripId: tripId,
-              data: alert,
-            );
-            continue;
-          }
-
-          await _firestoreService.saveAlert(
-            driverId: driverId,
-            data: {
-              ...alert,
-              'timestamp': FieldValue.serverTimestamp(),
-              'syncedFromCache': true,
-            },
-          );
-        } catch (error) {
-          if (internalType != null) {
-            alert['_type'] = internalType;
-          }
-          if (tripId != null) {
-            alert['tripId'] = tripId;
-          }
-          await _offlineCache.cacheAlert(alert);
-          debugPrint('Pending sync item failed and was re-cached: $error');
+        final synced = result.fold((_) => false, (_) => true);
+        if (!synced) {
+          await _offlineCache.cacheAlert(item);
         }
       }
 
       final locations = await _offlineCache.drainLocations();
-      if (locations.isNotEmpty) {
-        final latest = locations.last;
-        final driverId = latest['driverId'] as String?;
-        final latitude = (latest['latitude'] as num?)?.toDouble();
-        final longitude = (latest['longitude'] as num?)?.toDouble();
+      for (final rawLocation in locations) {
+        final item = Map<String, dynamic>.from(rawLocation);
 
-        if (driverId != null && latitude != null && longitude != null) {
-          try {
-            await _locationService.updateDriverLocation(
-              driverId: driverId,
-              latitude: latitude,
-              longitude: longitude,
-            );
-          } catch (error) {
-            await _offlineCache.cacheLocation(latest);
-            debugPrint(
-              'Pending location sync failed and was re-cached: $error',
-            );
-          }
+        final tripId = _toInt(item['tripId']);
+        final latitude = _toDouble(item['latitude']);
+        final longitude = _toDouble(item['longitude']);
+        final notes = (item['notes'] ?? '').toString().trim();
+
+        if (tripId <= 0 || latitude == null || longitude == null) {
+          continue;
+        }
+
+        final result = await _pushTripLocationUseCase(
+          tripId: tripId,
+          latitude: latitude,
+          longitude: longitude,
+          notes: notes.isEmpty ? null : notes,
+        );
+
+        final synced = result.fold((_) => false, (_) => true);
+        if (!synced) {
+          await _offlineCache.cacheLocation(item);
         }
       }
 
@@ -501,122 +715,102 @@ class TripCubit extends Cubit<TripState> {
   }
 
   Future<void> endTrip() async {
-    if (_activeTrip == null || state is TripEnding) {
+    final trip = _activeTrip;
+    if (trip == null || state is TripEnding || _isTransitioning) {
+      return;
+    }
+
+    if (!_connectivity.isOnline) {
+      _emitActionError('Internet connection is required to finish the trip.');
       return;
     }
 
     final snapshot = _buildActiveState();
     emit(TripEnding(activeState: snapshot));
 
+    _isTransitioning = true;
+
     try {
-      _stopAllSubsystems();
+      final fallbackPosition = await _locationService.getCurrentPosition();
+      final latitude =
+          _lastPosition?.latitude ?? fallbackPosition?.latitude ?? snapshot.latitude;
+      final longitude = _lastPosition?.longitude ??
+          fallbackPosition?.longitude ??
+          snapshot.longitude;
 
-      final driverId = _prefs.getString(AppConstants.prefDriverId);
-      if (driverId == null || driverId.trim().isEmpty) {
-        throw Exception('Driver not found. Unable to complete the trip.');
+      if (latitude == null || longitude == null) {
+        throw Exception('Unable to get final location. Please try again.');
       }
 
-      final endTime = DateTime.now();
-      final difference = endTime.difference(_activeTrip!.startTime);
-      final duration = _formatDurationSummary(difference);
-      final distance = _formatDistanceSummary(_totalDistanceMeters);
-      final awakePercentage = _totalFrames > 0
-          ? (_safeFrames / _totalFrames * 100)
-          : 100.0;
-
-      final tripEndData = {
-        'status': 'completed',
-        'endTime': Timestamp.fromDate(endTime),
-        'duration': duration,
-        'distance': distance,
-        'alerts': _alertCount,
-        'drowsinessAlerts': _drowsinessAlerts,
-        'distractionAlerts': _distractionAlerts,
-        'awakePercentage': awakePercentage,
-        'detectionMethod': 'on_device',
-        'date': DateFormat('dd MMM yyyy - h:mm a').format(endTime),
-      };
-
-      if (_connectivity.isOnline) {
-        try {
-          await _firestoreService.updateTrip(
-            driverId: driverId,
-            tripId: _activeTrip!.id,
-            data: tripEndData,
-          );
-
-          await _firestoreService.updateTripAwakePercentage(
-            driverId: driverId,
-            tripId: _activeTrip!.id,
-            percentage: awakePercentage,
-          );
-
-          await _firestoreService.updateDriverStatistics(
-            driverId: driverId,
-            stats: {
-              'totalTrips': FieldValue.increment(1),
-              'totalAlerts': FieldValue.increment(_alertCount),
-              'awakePercentage': awakePercentage,
-              'lastTripDate': Timestamp.fromDate(endTime),
-            },
-          );
-        } catch (error) {
-          await _offlineCache.cacheAlert({
-            '_type': 'trip_end',
-            'tripId': _activeTrip!.id,
-            'driverId': driverId,
-            ...tripEndData,
-          });
-          debugPrint('Trip completion sync failed, cached locally: $error');
-        }
-      } else {
-        await _offlineCache.cacheAlert({
-          '_type': 'trip_end',
-          'tripId': _activeTrip!.id,
-          'driverId': driverId,
-          ...tripEndData,
-        });
-      }
-
-      if (_connectivity.isOnline) {
-        await _syncPendingData();
-      }
-
-      _activeTrip = null;
-
-      emit(
-        TripEnded(
-          duration: duration,
-          distance: distance,
-          alertCount: _alertCount,
-          awakePercentage: awakePercentage,
-        ),
+      final result = await _finishTripUseCase(
+        tripId: trip.tripIdOrZero,
+        latitude: latitude,
+        longitude: longitude,
+        endAddress: trip.to,
       );
 
-      _resetCounters();
+      await result.fold(
+        (failure) async {
+          emit(snapshot);
+          _emitActionError(_mapFailureMessage(failure));
+        },
+        (finishedTrip) async {
+          _activeTrip = finishedTrip;
+          if (_connectivity.isOnline) {
+            await _syncPendingData();
+          }
+
+          _stopAllSubsystems();
+          final summary = _buildEndedState(wasCancelled: false);
+          _activeTrip = null;
+          _resetCounters();
+          emit(summary);
+        },
+      );
     } catch (error) {
-      final fallbackState = activeSnapshot;
-      if (fallbackState != null) {
-        emit(fallbackState);
-      }
-      emit(
-        TripError(
-          message: _resolveErrorMessage(error),
-          keepNavigationHidden: fallbackState != null,
-        ),
-      );
+      emit(snapshot);
+      _emitActionError(_resolveErrorMessage(error));
+    } finally {
+      _isTransitioning = false;
     }
+  }
+
+  TripEnded _buildEndedState({required bool wasCancelled}) {
+    final trip = _activeTrip;
+
+    final fallbackDuration = _formatDurationSummary(
+      (trip?.endTime ?? DateTime.now()).difference(
+        trip?.startTime ?? DateTime.now(),
+      ),
+    );
+
+    final fallbackDistance = _formatDistanceSummary(_totalDistanceMeters);
+    final awake = _totalFrames > 0
+        ? (_safeFrames / _totalFrames * 100)
+        : (trip?.awakePercentage ?? 100.0);
+
+    return TripEnded(
+      duration:
+          (trip?.duration ?? '').trim().isNotEmpty ? trip!.duration : fallbackDuration,
+      distance:
+          (trip?.distance ?? '').trim().isNotEmpty ? trip!.distance : fallbackDistance,
+      alertCount: _alertCount,
+      awakePercentage: awake,
+      wasCancelled: wasCancelled,
+    );
   }
 
   void _stopAllSubsystems() {
     _detectionTimer?.cancel();
     _detectionTimer = null;
+
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = null;
+
     _locationService.stopTracking();
     _cameraService.dispose();
     _alertService.stop();
-    WakelockPlus.disable();
+    unawaited(WakelockPlus.disable());
   }
 
   void resetTrip() {
@@ -634,6 +828,7 @@ class TripCubit extends Cubit<TripState> {
     int? pendingSyncCount,
     double? latitude,
     double? longitude,
+    bool? isActionInProgress,
   }) {
     if (_activeTrip == null) {
       return;
@@ -648,6 +843,7 @@ class TripCubit extends Cubit<TripState> {
         pendingSyncCount: pendingSyncCount,
         latitude: latitude,
         longitude: longitude,
+        isActionInProgress: isActionInProgress,
       ),
     );
   }
@@ -660,6 +856,7 @@ class TripCubit extends Cubit<TripState> {
     int? pendingSyncCount,
     double? latitude,
     double? longitude,
+    bool? isActionInProgress,
   }) {
     final current = state;
     final base = switch (current) {
@@ -678,9 +875,9 @@ class TripCubit extends Cubit<TripState> {
       distractionAlerts: _distractionAlerts,
       awakePercentage: _totalFrames > 0
           ? (_safeFrames / _totalFrames * 100)
-          : 100.0,
-      latitude: latitude ?? base?.latitude,
-      longitude: longitude ?? base?.longitude,
+          : (_activeTrip?.awakePercentage ?? 100.0),
+      latitude: latitude ?? base?.latitude ?? _activeTrip?.currentLatitude,
+      longitude: longitude ?? base?.longitude ?? _activeTrip?.currentLongitude,
       totalDistanceMeters: _totalDistanceMeters,
       isAiReady:
           isAiReady ?? base?.isAiReady ?? _detectionService.isInitialized,
@@ -691,7 +888,20 @@ class TripCubit extends Cubit<TripState> {
           pendingSyncCount ??
           base?.pendingSyncCount ??
           _offlineCache.totalPendingCount,
+      isActionInProgress:
+          isActionInProgress ?? base?.isActionInProgress ?? false,
     );
+  }
+
+  void _emitActionError(String message) {
+    final snapshot = activeSnapshot;
+    if (snapshot == null) {
+      emit(TripError(message: message));
+      return;
+    }
+
+    emit(TripError(message: message, keepNavigationHidden: true));
+    emit(snapshot.copyWith(isActionInProgress: false));
   }
 
   void onAppPaused() {
@@ -705,16 +915,21 @@ class TripCubit extends Cubit<TripState> {
     }
 
     _cameraService.resume();
-    if (_cameraService.isInitialized && _detectionService.isInitialized) {
+    if (_activeTrip!.isStarted &&
+        _cameraService.isInitialized &&
+        _detectionService.isInitialized) {
       _startDetectionLoop();
     }
+
     if (_connectivity.isOnline) {
-      _syncPendingData();
+      unawaited(_syncPendingData());
     }
   }
 
   @override
   Future<void> close() {
+    _connectivity.onConnectivityRestored = null;
+    _connectivity.onConnectivityLost = null;
     _stopAllSubsystems();
     return super.close();
   }
@@ -742,5 +957,100 @@ class TripCubit extends Cubit<TripState> {
       return 'Something went wrong while handling the trip.';
     }
     return message;
+  }
+
+  bool _isSessionFailure(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('session') ||
+        normalized.contains('login again') ||
+        normalized.contains('unauthorized') ||
+        normalized.contains('token');
+  }
+
+  bool _isActiveTripConflict(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('already has an active trip') ||
+        normalized.contains('active trip');
+  }
+
+  String _mapFailureMessage(Failure failure) {
+    final message = failure.message.trim();
+    if (message.isEmpty) {
+      return 'Unable to process trip request right now. Please try again.';
+    }
+
+    final normalized = message.toLowerCase();
+
+    if (_isSessionFailure(normalized)) {
+      return 'Session expired. Please login again.';
+    }
+
+    if (normalized.contains('no internet') ||
+        normalized.contains('network') ||
+        normalized.contains('connection')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    if (normalized.contains('timeout') || normalized.contains('timed out')) {
+      return 'Connection timed out. Please try again.';
+    }
+
+    if (normalized.contains('already has an active trip')) {
+      return 'You already have an active trip. Resume, finish, or cancel it first.';
+    }
+
+    if (normalized.contains('only started trips can be stopped')) {
+      return 'Only active trips can be paused.';
+    }
+
+    if (normalized.contains('only stopped trips can be resumed')) {
+      return 'Only paused trips can be resumed.';
+    }
+
+    if (normalized.contains('only active trips can be finished')) {
+      return 'Only active or paused trips can be finished.';
+    }
+
+    if (normalized.contains('location updates are allowed only for active trips')) {
+      return 'Location updates are allowed only while the trip is active.';
+    }
+
+    if (normalized.contains('latitude and longitude are required')) {
+      return 'A valid GPS location is required for this action.';
+    }
+
+    if (normalized.contains('forbidden') || normalized.contains('access')) {
+      return 'You do not have permission to perform this action.';
+    }
+
+    if (normalized.contains('not found')) {
+      return 'Trip session was not found. Please refresh and try again.';
+    }
+
+    if (normalized.contains('server') || normalized.contains('500')) {
+      return 'Server error while handling trip request. Please try again shortly.';
+    }
+
+    return message;
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse((value ?? '').toString()) ?? 0;
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(value.toString());
   }
 }
