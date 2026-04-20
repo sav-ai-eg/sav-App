@@ -479,101 +479,13 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     });
 
     try {
-      final events = await context.read<TripCubit>().loadActiveTripEvents();
-
+      final tripCubit = context.read<TripCubit>();
+      final events = await tripCubit.loadActiveTripEvents();
       if (!mounted) {
         return;
       }
 
-      final currentContext = context;
-
-      if (events.isEmpty) {
-        ScaffoldMessenger.of(currentContext).showSnackBar(
-          const SnackBar(
-            content: Text('No timeline events yet.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-
-      await showModalBottomSheet<void>(
-        context: currentContext,
-        isScrollControlled: true,
-        backgroundColor: AppColors.whiteColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-        ),
-        builder: (sheetContext) {
-          return SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 56.w,
-                    height: 4.h,
-                    decoration: BoxDecoration(
-                      color: AppColors.lightGrayColor,
-                      borderRadius: BorderRadius.circular(999.r),
-                    ),
-                  ),
-                  SizedBox(height: 16.h),
-                  Text(
-                    'Trip Timeline',
-                    style: GoogleFonts.inter(
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimaryColor,
-                    ),
-                  ),
-                  SizedBox(height: 12.h),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: events.length,
-                      separatorBuilder: (_, __) => Divider(
-                        color: AppColors.lightGrayColor.withValues(alpha: 0.7),
-                        height: 1,
-                      ),
-                      itemBuilder: (_, index) {
-                        final event = events[index];
-                        return ListTile(
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 4.w,
-                            vertical: 4.h,
-                          ),
-                          leading: Icon(
-                            _eventIcon(event.eventType),
-                            color: AppColors.primaryColor,
-                          ),
-                          title: Text(
-                            _eventTitle(event.eventType),
-                            style: GoogleFonts.inter(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimaryColor,
-                            ),
-                          ),
-                          subtitle: Text(
-                            _eventSubtitle(event),
-                            style: GoogleFonts.inter(
-                              fontSize: 12.sp,
-                              color: AppColors.textSecondaryColor,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
+      await _presentEventsTimeline(events);
     } catch (error) {
       if (!mounted) {
         return;
@@ -589,6 +501,96 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
         });
       }
     }
+  }
+
+  Future<void> _presentEventsTimeline(List<TripEventEntity> events) async {
+    if (events.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No timeline events yet.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.whiteColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: AppColors.lightGrayColor,
+                    borderRadius: BorderRadius.circular(999.r),
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                Text(
+                  'Trip Timeline',
+                  style: GoogleFonts.inter(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimaryColor,
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: events.length,
+                    separatorBuilder: (_, __) => Divider(
+                      color: AppColors.lightGrayColor.withValues(alpha: 0.7),
+                      height: 1,
+                    ),
+                    itemBuilder: (_, index) {
+                      final event = events[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 4.w,
+                          vertical: 4.h,
+                        ),
+                        leading: Icon(
+                          _eventIcon(event.eventType),
+                          color: AppColors.primaryColor,
+                        ),
+                        title: Text(
+                          _eventTitle(event.eventType),
+                          style: GoogleFonts.inter(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimaryColor,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _eventSubtitle(event),
+                          style: GoogleFonts.inter(
+                            fontSize: 12.sp,
+                            color: AppColors.textSecondaryColor,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   IconData _eventIcon(String eventType) {
