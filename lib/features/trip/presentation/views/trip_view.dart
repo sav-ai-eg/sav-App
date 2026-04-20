@@ -10,6 +10,7 @@ import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cub
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/active_trip_widget.dart';
 import 'package:sav/features/trip/presentation/views/widgets/start_trip_form.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class TripView extends StatefulWidget {
   const TripView({super.key});
@@ -130,9 +131,8 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
       return ActiveTripWidget(state: state.activeState, isEnding: true);
     }
 
-    final activeState = state is TripActive
-        ? state
-        : context.read<TripCubit>().activeSnapshot;
+    final activeState =
+        state is TripActive ? state : context.read<TripCubit>().activeSnapshot;
 
     if (activeState != null) {
       return ActiveTripWidget(state: activeState);
@@ -162,45 +162,83 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
 }
 
 class _TripLoadingContent extends StatelessWidget {
-  final TripLoading state;
-
   const _TripLoadingContent({required this.state});
+
+  final TripLoading state;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 20.w),
-        child: SavCard(
-          borderRadius: 28,
-          padding: EdgeInsets.symmetric(horizontal: 22.w, vertical: 28.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: AppColors.primaryColor),
-              SizedBox(height: 18.h),
-              Text(
-                state.title,
-                style: GoogleFonts.inter(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryColor,
-                ),
-                textAlign: TextAlign.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              state.title,
+              style: GoogleFonts.inter(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryColor,
               ),
-              SizedBox(height: 10.h),
-              Text(
-                state.message,
-                style: GoogleFonts.inter(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.textSecondaryColor,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10.h),
+            Text(
+              state.message,
+              style: GoogleFonts.inter(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textSecondaryColor,
+                height: 1.5,
               ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            Skeletonizer(
+              enabled: true,
+              containersColor: AppColors.lightGrayColor,
+              child: SavCard(
+                borderRadius: 28,
+                padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 20.h),
+                child: Column(
+                  children: [
+                    Bone(
+                      height: 160.h,
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(20.r),
+                    ),
+                    SizedBox(height: 12.h),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Bone(
+                            height: 58.h,
+                            width: double.infinity,
+                            borderRadius: BorderRadius.circular(16.r),
+                          ),
+                        ),
+                        SizedBox(width: 10.w),
+                        Expanded(
+                          child: Bone(
+                            height: 58.h,
+                            width: double.infinity,
+                            borderRadius: BorderRadius.circular(16.r),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12.h),
+                    Bone(
+                      height: 52.h,
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(16.r),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -208,51 +246,71 @@ class _TripLoadingContent extends StatelessWidget {
 }
 
 class _TripEndedContent extends StatelessWidget {
-  final TripEnded state;
-
   const _TripEndedContent({required this.state});
+
+  final TripEnded state;
 
   @override
   Widget build(BuildContext context) {
+    final isCancelled = state.wasCancelled;
+
     return Center(
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 84.w,
-              height: 84.w,
-              decoration: const BoxDecoration(
-                color: AppColors.accentColor,
+              width: 92.w,
+              height: 92.w,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isCancelled
+                      ? <Color>[
+                          AppColors.errorColor.withValues(alpha: 0.22),
+                          AppColors.warningColor.withValues(alpha: 0.18),
+                        ]
+                      : <Color>[
+                          AppColors.successColor.withValues(alpha: 0.20),
+                          AppColors.accentColor.withValues(alpha: 0.22),
+                        ],
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.check_circle_outline_rounded,
-                size: 46.sp,
-                color: AppColors.primaryColor,
+                isCancelled
+                    ? Icons.do_not_disturb_on_rounded
+                    : Icons.check_circle_rounded,
+                size: 52.sp,
+                color: isCancelled
+                    ? AppColors.errorColor
+                    : AppColors.successColor,
               ),
             ),
-            SizedBox(height: 24.h),
+            SizedBox(height: 22.h),
             Text(
-              state.wasCancelled ? 'Trip cancelled' : 'Trip completed',
+              isCancelled ? 'Trip Cancelled' : 'Trip Completed',
               style: GoogleFonts.inter(
-                fontSize: 22.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryColor,
+                fontSize: 24.sp,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimaryColor,
               ),
             ),
-            SizedBox(height: 12.h),
+            SizedBox(height: 10.h),
             Text(
-              state.wasCancelled
-                  ? 'Trip cancellation is saved and visible in history.'
-                  : 'Your summary is saved and ready in history.',
+              isCancelled
+                  ? 'Trip cancellation was saved successfully.'
+                  : 'Your trip summary is ready and saved in history.',
               style: GoogleFonts.inter(
                 fontSize: 14.sp,
-                fontWeight: FontWeight.w400,
+                fontWeight: FontWeight.w500,
                 color: AppColors.textSecondaryColor,
+                height: 1.5,
               ),
+              textAlign: TextAlign.center,
             ),
-            SizedBox(height: 24.h),
+            SizedBox(height: 22.h),
             SavCard(
               borderRadius: 24,
               padding: EdgeInsets.all(20.w),
@@ -290,11 +348,33 @@ class _TripEndedContent extends StatelessWidget {
                 ],
               ),
             ),
-            SizedBox(height: 28.h),
-            SavButton(
-              text: 'Start New Trip',
-              icon: Icons.refresh_rounded,
-              onPressed: () => context.read<TripCubit>().resetTrip(),
+            SizedBox(height: 18.h),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      context.read<TripCubit>().resetTrip();
+                      context.read<BottomNavCubit>().changeIndex(index: 1);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryColor,
+                      side: const BorderSide(color: AppColors.primaryColor),
+                      minimumSize: Size(double.infinity, 50.h),
+                    ),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Open History'),
+                  ),
+                ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: SavButton(
+                    text: 'Start New',
+                    icon: Icons.refresh_rounded,
+                    onPressed: () => context.read<TripCubit>().resetTrip(),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -309,17 +389,17 @@ class _TripEndedContent extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-
   const _SummaryRow({
     required this.icon,
     required this.label,
     required this.value,
     this.valueColor,
   });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -331,17 +411,17 @@ class _SummaryRow extends StatelessWidget {
           label,
           style: GoogleFonts.inter(
             fontSize: 14.sp,
-            fontWeight: FontWeight.w400,
-            color: AppColors.grayColor,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondaryColor,
           ),
         ),
         const Spacer(),
         Text(
           value,
           style: GoogleFonts.inter(
-            fontSize: 16.sp,
+            fontSize: 14.sp,
             fontWeight: FontWeight.w700,
-            color: valueColor ?? AppColors.blackColor,
+            color: valueColor ?? AppColors.textPrimaryColor,
           ),
         ),
       ],

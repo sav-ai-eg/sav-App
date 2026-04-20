@@ -10,6 +10,7 @@ import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/di/injection.dart';
 import 'package:sav/core/services/connectivity_service.dart';
+import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/permission_service.dart';
@@ -20,6 +21,7 @@ import 'package:sav/core/widgets/sav_dialog.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/trip_location_field.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:uuid/uuid.dart';
 
 class StartTripForm extends StatefulWidget {
@@ -38,6 +40,7 @@ class _StartTripFormState extends State<StartTripForm> {
   final _placesService = getIt<GooglePlacesService>();
   final _connectivityService = getIt<ConnectivityService>();
   final _locationService = getIt<LocationService>();
+  final _directionsService = getIt<GoogleDirectionsService>();
   final _detectionService = getIt<TfliteDetectionService>();
 
   Timer? _fromDebounce;
@@ -199,6 +202,8 @@ class _StartTripFormState extends State<StartTripForm> {
                           currentPosition: _locationService.lastPosition,
                           fromPlace: _selectedFrom,
                           toPlace: _selectedTo,
+                          isOnline: _connectivityService.isOnline,
+                          directionsService: _directionsService,
                         ),
                       ],
                     ),
@@ -636,16 +641,52 @@ class _InfoBanner extends StatelessWidget {
   }
 }
 
-class _TripMapPreviewCard extends StatelessWidget {
-  final Position? currentPosition;
-  final TripPlaceModel? fromPlace;
-  final TripPlaceModel? toPlace;
-
+class _TripMapPreviewCard extends StatefulWidget {
   const _TripMapPreviewCard({
     required this.currentPosition,
     required this.fromPlace,
     required this.toPlace,
+    required this.isOnline,
+    required this.directionsService,
   });
+
+  final Position? currentPosition;
+  final TripPlaceModel? fromPlace;
+  final TripPlaceModel? toPlace;
+  final bool isOnline;
+  final GoogleDirectionsService directionsService;
+
+  @override
+  State<_TripMapPreviewCard> createState() => _TripMapPreviewCardState();
+}
+
+class _TripMapPreviewCardState extends State<_TripMapPreviewCard> {
+  GoogleRouteData? _routeData;
+  bool _isRouteLoading = false;
+  bool _routeFailed = false;
+  int _routeRequestId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoute(forceLoading: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TripMapPreviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final hasChanged =
+        oldWidget.fromPlace?.latitude != widget.fromPlace?.latitude ||
+        oldWidget.fromPlace?.longitude != widget.fromPlace?.longitude ||
+        oldWidget.toPlace?.latitude != widget.toPlace?.latitude ||
+        oldWidget.toPlace?.longitude != widget.toPlace?.longitude ||
+        oldWidget.isOnline != widget.isOnline;
+
+    if (hasChanged) {
+      _loadRoute();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -658,39 +699,44 @@ class _TripMapPreviewCard extends StatelessWidget {
       ),
     };
 
-    if (fromPlace?.hasCoordinates ?? false) {
+    if (widget.fromPlace?.hasCoordinates ?? false) {
       markers.add(
         Marker(
           markerId: const MarkerId('from'),
-          position: LatLng(fromPlace!.latitude!, fromPlace!.longitude!),
-          infoWindow: InfoWindow(title: fromPlace!.title),
+          position: LatLng(widget.fromPlace!.latitude!, widget.fromPlace!.longitude!),
+          infoWindow: InfoWindow(title: widget.fromPlace!.title),
         ),
       );
     }
 
-    if (toPlace?.hasCoordinates ?? false) {
+    if (widget.toPlace?.hasCoordinates ?? false) {
       markers.add(
         Marker(
           markerId: const MarkerId('to'),
-          position: LatLng(toPlace!.latitude!, toPlace!.longitude!),
+          position: LatLng(widget.toPlace!.latitude!, widget.toPlace!.longitude!),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          infoWindow: InfoWindow(title: toPlace!.title),
+          infoWindow: InfoWindow(title: widget.toPlace!.title),
         ),
       );
     }
 
+    final polylinePoints = _buildPolylinePoints();
+    final hasRealRoute = _routeData?.hasPath ?? false;
+
     final polylines = <Polyline>{};
-    if ((fromPlace?.hasCoordinates ?? false) &&
-        (toPlace?.hasCoordinates ?? false)) {
+    if (polylinePoints.length >= 2) {
       polylines.add(
         Polyline(
           polylineId: const PolylineId('route_preview'),
-          color: AppColors.primaryColor,
-          width: 4,
-          points: [
-            LatLng(fromPlace!.latitude!, fromPlace!.longitude!),
-            LatLng(toPlace!.latitude!, toPlace!.longitude!),
-          ],
+          color: hasRealRoute
+              ? AppColors.primaryColor
+              : AppColors.secondaryColor.withValues(alpha: 0.9),
+          width: hasRealRoute ? 5 : 4,
+          points: polylinePoints,
+          geodesic: true,
+          patterns: hasRealRoute
+              ? const <PatternItem>[]
+              : <PatternItem>[PatternItem.dash(20), PatternItem.gap(10)],
         ),
       );
     }
@@ -707,7 +753,7 @@ class _TripMapPreviewCard extends StatelessWidget {
               AbsorbPointer(
                 child: GoogleMap(
                   key: ValueKey(
-                    '${center.latitude}_${center.longitude}_${markers.length}',
+                    '${center.latitude}_${center.longitude}_${markers.length}_${polylinePoints.length}',
                   ),
                   initialCameraPosition: CameraPosition(
                     target: center,
@@ -727,6 +773,66 @@ class _TripMapPreviewCard extends StatelessWidget {
                   polylines: polylines,
                 ),
               ),
+              if (_isRouteLoading && _routeData == null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Skeletonizer(
+                      enabled: true,
+                      containersColor: AppColors.lightGrayColor,
+                      child: Container(
+                        color: AppColors.whiteColor.withValues(alpha: 0.52),
+                        padding: EdgeInsets.all(14.w),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Bone(
+                            height: 36.h,
+                            width: double.infinity,
+                            borderRadius: BorderRadius.circular(14.r),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (!hasRealRoute &&
+                  !_isRouteLoading &&
+                  (widget.fromPlace?.hasCoordinates ?? false) &&
+                  (widget.toPlace?.hasCoordinates ?? false))
+                Positioned(
+                  left: 14.w,
+                  top: 14.h,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 7.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999.r),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _routeFailed
+                              ? Icons.warning_amber_rounded
+                              : Icons.alt_route_rounded,
+                          size: 14.sp,
+                          color: AppColors.warningColor,
+                        ),
+                        SizedBox(width: 6.w),
+                        Text(
+                          _routeFailed ? 'Approx route' : 'Static route',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.warningColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Positioned(
                 left: 14.w,
                 right: 14.w,
@@ -770,28 +876,114 @@ class _TripMapPreviewCard extends StatelessWidget {
     );
   }
 
+  List<LatLng> _buildPolylinePoints() {
+    if (_routeData?.hasPath ?? false) {
+      return _routeData!.points;
+    }
+
+    if ((widget.fromPlace?.hasCoordinates ?? false) &&
+        (widget.toPlace?.hasCoordinates ?? false)) {
+      return <LatLng>[
+        LatLng(widget.fromPlace!.latitude!, widget.fromPlace!.longitude!),
+        LatLng(widget.toPlace!.latitude!, widget.toPlace!.longitude!),
+      ];
+    }
+
+    return const <LatLng>[];
+  }
+
+  Future<void> _loadRoute({bool forceLoading = false}) async {
+    final from = widget.fromPlace;
+    final to = widget.toPlace;
+
+    if (!widget.isOnline ||
+        from == null ||
+        to == null ||
+        !from.hasCoordinates ||
+        !to.hasCoordinates) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _routeData = null;
+        _routeFailed = false;
+        _isRouteLoading = false;
+      });
+      return;
+    }
+
+    final requestId = ++_routeRequestId;
+    if (mounted) {
+      setState(() {
+        _routeFailed = false;
+        _isRouteLoading = forceLoading || _routeData == null;
+      });
+    }
+
+    try {
+      final routeData = await widget.directionsService.getDrivingRoute(
+        originLatitude: from.latitude!,
+        originLongitude: from.longitude!,
+        destinationLatitude: to.latitude!,
+        destinationLongitude: to.longitude!,
+      );
+
+      if (!mounted || requestId != _routeRequestId) {
+        return;
+      }
+
+      setState(() {
+        _routeData = routeData.hasPath ? routeData : null;
+        _routeFailed = false;
+        _isRouteLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _routeRequestId) {
+        return;
+      }
+
+      setState(() {
+        _routeData = null;
+        _routeFailed = true;
+        _isRouteLoading = false;
+      });
+    }
+  }
+
   LatLng _resolveCenter() {
-    if (toPlace?.hasCoordinates ?? false) {
-      return LatLng(toPlace!.latitude!, toPlace!.longitude!);
+    if (widget.toPlace?.hasCoordinates ?? false) {
+      return LatLng(widget.toPlace!.latitude!, widget.toPlace!.longitude!);
     }
-    if (fromPlace?.hasCoordinates ?? false) {
-      return LatLng(fromPlace!.latitude!, fromPlace!.longitude!);
+    if (widget.fromPlace?.hasCoordinates ?? false) {
+      return LatLng(widget.fromPlace!.latitude!, widget.fromPlace!.longitude!);
     }
-    if (currentPosition != null) {
-      return LatLng(currentPosition!.latitude, currentPosition!.longitude);
+    if (widget.currentPosition != null) {
+      return LatLng(
+        widget.currentPosition!.latitude,
+        widget.currentPosition!.longitude,
+      );
     }
     return const LatLng(31.0409, 31.3785);
   }
 
   String _buildLabel() {
-    if (fromPlace != null && toPlace != null) {
-      return '${fromPlace!.title} to ${toPlace!.title}';
+    if (_routeData?.hasPath ?? false) {
+      final distance = _routeData!.distanceText;
+      final duration = _routeData!.durationText;
+      if (distance.isNotEmpty && duration.isNotEmpty) {
+        return 'Live route: $distance - ETA $duration';
+      }
     }
-    if (fromPlace != null) {
-      return fromPlace!.title;
+
+    if (widget.fromPlace != null && widget.toPlace != null) {
+      return '${widget.fromPlace!.title} to ${widget.toPlace!.title}';
     }
-    if (toPlace != null) {
-      return toPlace!.title;
+    if (widget.fromPlace != null) {
+      return widget.fromPlace!.title;
+    }
+    if (widget.toPlace != null) {
+      return widget.toPlace!.title;
     }
     return 'Map preview';
   }

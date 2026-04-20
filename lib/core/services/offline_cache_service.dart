@@ -10,6 +10,9 @@ import 'package:sav/core/constants/app_constants.dart';
 /// Synced to Firestore when connectivity is restored.
 @lazySingleton
 class OfflineCacheService {
+  static const String _tripHistoryCacheKey = 'trip_history_cache_v1';
+  static const String _tripHistoryCacheAtKey = 'trip_history_cache_at';
+
   Box? _alertsBox;
   Box? _locationsBox;
   Box? _settingsBox;
@@ -113,6 +116,81 @@ class OfflineCacheService {
 
   /// Total pending items across all caches.
   int get totalPendingCount => pendingAlertCount + pendingLocationCount;
+
+  // ─── Trip History Cache ────────────────────────────────────
+
+  Future<void> cacheTripHistory(List<Map<String, dynamic>> items) async {
+    try {
+      if (_settingsBox == null) {
+        return;
+      }
+
+      final payload = items.map(_sanitizeForCache).toList(growable: false);
+      await _settingsBox!.put(_tripHistoryCacheKey, jsonEncode(payload));
+      await _settingsBox!.put(
+        _tripHistoryCacheAtKey,
+        DateTime.now().toIso8601String(),
+      );
+    } catch (e) {
+      debugPrint('❌ OfflineCacheService.cacheTripHistory error: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> readCachedTripHistory() {
+    try {
+      if (_settingsBox == null) {
+        return const <Map<String, dynamic>>[];
+      }
+
+      final raw = _settingsBox!.get(_tripHistoryCacheKey);
+      if (raw == null) {
+        return const <Map<String, dynamic>>[];
+      }
+
+      final decoded = jsonDecode(raw.toString());
+      if (decoded is! List) {
+        return const <Map<String, dynamic>>[];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('❌ OfflineCacheService.readCachedTripHistory error: $e');
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  DateTime? readCachedTripHistoryAt() {
+    try {
+      if (_settingsBox == null) {
+        return null;
+      }
+
+      final raw = _settingsBox!.get(_tripHistoryCacheAtKey);
+      if (raw == null) {
+        return null;
+      }
+
+      return DateTime.tryParse(raw.toString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearCachedTripHistory() async {
+    try {
+      if (_settingsBox == null) {
+        return;
+      }
+
+      await _settingsBox!.delete(_tripHistoryCacheKey);
+      await _settingsBox!.delete(_tripHistoryCacheAtKey);
+    } catch (e) {
+      debugPrint('❌ OfflineCacheService.clearCachedTripHistory error: $e');
+    }
+  }
 
   // ─── Settings Cache ─────────────────────────────────────────
 

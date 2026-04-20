@@ -30,7 +30,7 @@ class HistorySearchBar extends StatelessWidget {
           color: AppColors.blackColor,
         ),
         decoration: InputDecoration(
-          hintText: 'Search By Date',
+          hintText: 'Search date, route, or status',
           hintStyle: GoogleFonts.inter(
             fontSize: 14.sp,
             fontWeight: FontWeight.w400,

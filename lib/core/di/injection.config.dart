@@ -176,7 +176,11 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i133.StopTripUseCase(gh<_i389.TripRepository>()),
     );
     gh.factory<_i249.HistoryCubit>(
-      () => _i249.HistoryCubit(gh<_i364.LoadDriverTripHistoryUseCase>()),
+      () => _i249.HistoryCubit(
+        gh<_i364.LoadDriverTripHistoryUseCase>(),
+        gh<_i789.OfflineCacheService>(),
+        gh<_i441.ConnectivityService>(),
+      ),
     );
     gh.factory<_i193.LoadHomeDashboardUseCase>(
       () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),

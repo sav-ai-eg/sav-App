@@ -8,6 +8,14 @@ import 'package:sav/features/history/presentation/cubit/history_cubit.dart';
 class HistoryFilterRow extends StatelessWidget {
   const HistoryFilterRow({super.key});
 
+  static const List<String> _allFilters = <String>[
+    'Last Week',
+    'Last Month',
+    'Finished',
+    'Cancelled',
+    'With Alerts',
+  ];
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<HistoryCubit, HistoryState>(
@@ -19,9 +27,7 @@ class HistoryFilterRow extends StatelessWidget {
           children: [
             /// Add Filter button
             _AddFilterButton(
-              onTap: () {
-                // TODO: Show filter options bottom sheet
-              },
+              onTap: () => _showFiltersBottomSheet(context),
             ),
 
             /// Filter chips
@@ -30,7 +36,111 @@ class HistoryFilterRow extends StatelessWidget {
               isActive: cubit.activeFilter == 'Last Week',
               onTap: () => cubit.setFilter('Last Week'),
             ),
+            _FilterChip(
+              label: 'With Alerts',
+              isActive: cubit.activeFilter == 'With Alerts',
+              onTap: () => cubit.setFilter('With Alerts'),
+            ),
+            if (cubit.activeFilter != null)
+              _FilterChip(
+                label: 'Clear',
+                isActive: false,
+                onTap: () => cubit.setFilter(null),
+              ),
           ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showFiltersBottomSheet(BuildContext context) async {
+    final cubit = context.read<HistoryCubit>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.whiteColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 52.w,
+                    height: 4.h,
+                    decoration: BoxDecoration(
+                      color: AppColors.lightGrayColor,
+                      borderRadius: BorderRadius.circular(999.r),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                Text(
+                  'Filter History',
+                  style: GoogleFonts.inter(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimaryColor,
+                  ),
+                ),
+                SizedBox(height: 10.h),
+                ..._allFilters.map((filter) {
+                  final isSelected = cubit.activeFilter == filter;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      isSelected
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_off_rounded,
+                      color: isSelected
+                          ? AppColors.primaryColor
+                          : AppColors.grayColor,
+                    ),
+                    title: Text(
+                      filter,
+                      style: GoogleFonts.inter(
+                        fontSize: 15.sp,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: AppColors.textPrimaryColor,
+                      ),
+                    ),
+                    onTap: () {
+                      cubit.setFilter(filter);
+                      Navigator.of(sheetContext).pop();
+                    },
+                  );
+                }),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.clear_rounded,
+                    color: AppColors.errorColor,
+                  ),
+                  title: Text(
+                    'Clear filters',
+                    style: GoogleFonts.inter(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.errorColor,
+                    ),
+                  ),
+                  onTap: () {
+                    cubit.setFilter(null);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

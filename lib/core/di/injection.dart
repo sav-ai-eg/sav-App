@@ -6,6 +6,7 @@ import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/connectivity_service.dart';
+import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/di/injection.config.dart';
@@ -107,6 +108,12 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<GooglePlacesService>()) {
     getIt.registerLazySingleton<GooglePlacesService>(
       () => GooglePlacesService(dio: getIt<Dio>()),
+    );
+  }
+
+  if (!getIt.isRegistered<GoogleDirectionsService>()) {
+    getIt.registerLazySingleton<GoogleDirectionsService>(
+      () => GoogleDirectionsService(dio: getIt<Dio>()),
     );
   }
 

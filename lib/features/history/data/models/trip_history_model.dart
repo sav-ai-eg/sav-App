@@ -77,6 +77,36 @@ class TripHistoryModel {
     );
   }
 
+  factory TripHistoryModel.fromCacheMap(Map<String, dynamic> map) {
+    return TripHistoryModel(
+      id: (map['id'] ?? '').toString(),
+      date: (map['date'] ?? '').toString(),
+      from: (map['from'] ?? '').toString(),
+      to: (map['to'] ?? '').toString(),
+      duration: (map['duration'] ?? '').toString(),
+      distance: (map['distance'] ?? '').toString(),
+      alerts: _toInt(map['alerts']),
+      status: (map['status'] ?? '').toString(),
+      startTime: _toDateTime(map['startTime']),
+      endTime: _toDateTime(map['endTime']),
+    );
+  }
+
+  Map<String, dynamic> toCacheMap() {
+    return <String, dynamic>{
+      'id': id,
+      'date': date,
+      'from': from,
+      'to': to,
+      'duration': duration,
+      'distance': distance,
+      'alerts': alerts,
+      'status': status,
+      'startTime': startTime?.toIso8601String(),
+      'endTime': endTime?.toIso8601String(),
+    };
+  }
+
   static String _compactAddress(String value) {
     final parts = value
         .split(',')
@@ -116,5 +146,21 @@ class TripHistoryModel {
     }
 
     return '$totalMinutes min';
+  }
+
+  static int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse((value ?? '').toString()) ?? 0;
+  }
+
+  static DateTime? _toDateTime(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    return DateTime.tryParse(value.toString());
   }
 }

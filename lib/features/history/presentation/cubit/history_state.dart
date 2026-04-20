@@ -22,7 +22,16 @@ class HistoryEmpty extends HistoryState {
 
 class HistoryLoaded extends HistoryState {
   final List<TripHistoryModel> trips;
-  const HistoryLoaded({required this.trips});
+  final bool isFromCache;
+  final DateTime? cachedAt;
+  final String? noticeMessage;
+
+  const HistoryLoaded({
+    required this.trips,
+    this.isFromCache = false,
+    this.cachedAt,
+    this.noticeMessage,
+  });
 }
 
 class HistoryError extends HistoryState {

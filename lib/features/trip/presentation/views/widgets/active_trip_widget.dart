@@ -4,13 +4,17 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/trip_slide_action.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class ActiveTripWidget extends StatefulWidget {
   final TripActive state;
@@ -30,12 +34,24 @@ class ActiveTripWidget extends StatefulWidget {
 
 class _ActiveTripWidgetState extends State<ActiveTripWidget>
     with SingleTickerProviderStateMixin {
+  static const double _routeRefreshMinDistanceMeters = 80;
+
   late Timer _timer;
   Duration _elapsed = Duration.zero;
   GoogleMapController? _mapController;
   late AnimationController _alertAnimController;
   late Animation<double> _alertOpacity;
   bool _isProcessingAction = false;
+
+  final GoogleDirectionsService _directionsService =
+      GetIt.instance<GoogleDirectionsService>();
+
+  Timer? _routeDebounce;
+  GoogleRouteData? _routeData;
+  bool _isRouteLoading = false;
+  bool _routeFailed = false;
+  int _routeRequestId = 0;
+  LatLng? _lastRouteOrigin;
 
   @override
   void initState() {
@@ -57,6 +73,8 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
       parent: _alertAnimController,
       curve: Curves.easeInOut,
     );
+
+    _scheduleRouteRefresh(force: true);
   }
 
   @override
@@ -65,6 +83,10 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
 
     final latitude = widget.state.latitude;
     final longitude = widget.state.longitude;
+    final destinationChanged =
+      oldWidget.state.trip.toLatitude != widget.state.trip.toLatitude ||
+      oldWidget.state.trip.toLongitude != widget.state.trip.toLongitude;
+
     if (latitude != null &&
         longitude != null &&
         _mapController != null &&
@@ -73,6 +95,12 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
       _mapController!.animateCamera(
         CameraUpdate.newLatLng(LatLng(latitude, longitude)),
       );
+    }
+
+    final movedSignificantly =
+        _hasSignificantMovement(oldWidget: oldWidget, latitude: latitude, longitude: longitude);
+    if (destinationChanged || movedSignificantly) {
+      _scheduleRouteRefresh();
     }
 
     if (widget.dangerAlert != null && oldWidget.dangerAlert == null) {
@@ -88,6 +116,7 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   @override
   void dispose() {
     _timer.cancel();
+    _routeDebounce?.cancel();
     _mapController?.dispose();
     _alertAnimController.dispose();
     super.dispose();
@@ -116,7 +145,10 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
             mapToolbarEnabled: false,
             markers: _buildMarkers(driverPosition),
             polylines: _buildPolylines(driverPosition),
-            onMapCreated: (controller) => _mapController = controller,
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _fitCameraToRoute();
+            },
           ),
         ),
         Positioned.fill(
@@ -194,6 +226,19 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                     ],
                   ),
                 ),
+                if (_isRouteLoading || (_routeData?.hasPath ?? false) || _routeFailed)
+                  Padding(
+                    padding: EdgeInsets.only(top: 8.h),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _RouteInfoChip(
+                        loading: _isRouteLoading,
+                        failed: _routeFailed,
+                        distance: _routeData?.distanceText,
+                        eta: _routeData?.durationText,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -204,6 +249,10 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
           child: FloatingActionButton.small(
             heroTag: 'trip_recenter',
             onPressed: () {
+              if ((_routeData?.hasPath ?? false) && _fitCameraToRoute()) {
+                return;
+              }
+
               _mapController?.animateCamera(
                 CameraUpdate.newCameraPosition(
                   CameraPosition(target: driverPosition, zoom: 16),
@@ -230,6 +279,10 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
             onPauseResume: _handlePauseResume,
             onCancelTrip: _handleCancelTrip,
             onSlideToEnd: () => _confirmEndTrip(context),
+            routeDistanceLabel: _routeData?.distanceText,
+            routeEtaLabel: _routeData?.durationText,
+            hasLiveRoute: _routeData?.hasPath ?? false,
+            routeLoading: _isRouteLoading,
           ),
         ),
         if (widget.dangerAlert != null)
@@ -357,18 +410,235 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
 
   Set<Polyline> _buildPolylines(LatLng driverPosition) {
     final trip = widget.state.trip;
-    if (trip.toLatitude == null || trip.toLongitude == null) {
-      return const {};
+    final destination =
+        trip.toLatitude != null && trip.toLongitude != null
+        ? LatLng(trip.toLatitude!, trip.toLongitude!)
+        : null;
+
+    if ((_routeData?.hasPath ?? false)) {
+      return <Polyline>{
+        Polyline(
+          polylineId: const PolylineId('trip_progress_live_route'),
+          color: AppColors.primaryColor,
+          width: 6,
+          geodesic: true,
+          points: _routeData!.points,
+        ),
+      };
     }
 
-    return {
+    if (destination == null) {
+      return const <Polyline>{};
+    }
+
+    return <Polyline>{
       Polyline(
-        polylineId: const PolylineId('trip_progress'),
-        color: AppColors.primaryColor,
+        polylineId: const PolylineId('trip_progress_fallback'),
+        color: AppColors.secondaryColor.withValues(alpha: 0.95),
         width: 4,
-        points: [driverPosition, LatLng(trip.toLatitude!, trip.toLongitude!)],
+        geodesic: true,
+        points: <LatLng>[driverPosition, destination],
+        patterns: <PatternItem>[PatternItem.dash(20), PatternItem.gap(10)],
       ),
     };
+  }
+
+  bool _hasSignificantMovement({
+    required ActiveTripWidget oldWidget,
+    required double? latitude,
+    required double? longitude,
+  }) {
+    final oldLat = oldWidget.state.latitude;
+    final oldLng = oldWidget.state.longitude;
+
+    if (latitude == null || longitude == null || oldLat == null || oldLng == null) {
+      return false;
+    }
+
+    final movedMeters = Geolocator.distanceBetween(
+      oldLat,
+      oldLng,
+      latitude,
+      longitude,
+    );
+
+    return movedMeters >= _routeRefreshMinDistanceMeters;
+  }
+
+  void _scheduleRouteRefresh({bool force = false}) {
+    final endpoints = _resolveRouteEndpoints();
+    if (endpoints == null) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _routeData = null;
+        _isRouteLoading = false;
+        _routeFailed = false;
+      });
+      return;
+    }
+
+    _routeDebounce?.cancel();
+    final requestId = ++_routeRequestId;
+
+    if (force) {
+      unawaited(_refreshRoute(endpoints.origin, endpoints.destination, requestId));
+      return;
+    }
+
+    _routeDebounce = Timer(
+      const Duration(milliseconds: 850),
+      () => unawaited(
+        _refreshRoute(endpoints.origin, endpoints.destination, requestId),
+      ),
+    );
+  }
+
+  Future<void> _refreshRoute(
+    LatLng origin,
+    LatLng destination,
+    int requestId,
+  ) async {
+    if (_lastRouteOrigin != null) {
+      final movedMeters = Geolocator.distanceBetween(
+        _lastRouteOrigin!.latitude,
+        _lastRouteOrigin!.longitude,
+        origin.latitude,
+        origin.longitude,
+      );
+
+      if (movedMeters < _routeRefreshMinDistanceMeters && _routeData != null) {
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isRouteLoading = true;
+        _routeFailed = false;
+      });
+    }
+
+    try {
+      final route = await _directionsService.getDrivingRoute(
+        originLatitude: origin.latitude,
+        originLongitude: origin.longitude,
+        destinationLatitude: destination.latitude,
+        destinationLongitude: destination.longitude,
+      );
+
+      if (!mounted || requestId != _routeRequestId) {
+        return;
+      }
+
+      _lastRouteOrigin = origin;
+      setState(() {
+        _routeData = route.hasPath ? route : null;
+        _isRouteLoading = false;
+        _routeFailed = !route.hasPath;
+      });
+
+      _fitCameraToRoute();
+    } catch (_) {
+      if (!mounted || requestId != _routeRequestId) {
+        return;
+      }
+
+      setState(() {
+        _routeData = null;
+        _isRouteLoading = false;
+        _routeFailed = true;
+      });
+    }
+  }
+
+  ({LatLng origin, LatLng destination})? _resolveRouteEndpoints() {
+    final trip = widget.state.trip;
+    final destination =
+        trip.toLatitude != null && trip.toLongitude != null
+        ? LatLng(trip.toLatitude!, trip.toLongitude!)
+        : null;
+
+    final origin =
+        widget.state.latitude != null && widget.state.longitude != null
+        ? LatLng(widget.state.latitude!, widget.state.longitude!)
+        : (trip.fromLatitude != null && trip.fromLongitude != null
+              ? LatLng(trip.fromLatitude!, trip.fromLongitude!)
+              : null);
+
+    if (origin == null || destination == null) {
+      return null;
+    }
+
+    return (origin: origin, destination: destination);
+  }
+
+  bool _fitCameraToRoute() {
+    final controller = _mapController;
+    if (controller == null) {
+      return false;
+    }
+
+    final route = _routeData;
+    if (route == null || !route.hasPath) {
+      return false;
+    }
+
+    final bounds = route.bounds ?? _latLngBoundsFromPoints(route.points);
+    if (bounds == null) {
+      return false;
+    }
+
+    unawaited(
+      controller.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 90),
+      ).catchError((_) {}),
+    );
+
+    return true;
+  }
+
+  LatLngBounds? _latLngBoundsFromPoints(List<LatLng> points) {
+    if (points.length < 2) {
+      return null;
+    }
+
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLng = points.first.longitude;
+    var maxLng = points.first.longitude;
+
+    for (final point in points.skip(1)) {
+      if (point.latitude < minLat) {
+        minLat = point.latitude;
+      }
+      if (point.latitude > maxLat) {
+        maxLat = point.latitude;
+      }
+      if (point.longitude < minLng) {
+        minLng = point.longitude;
+      }
+      if (point.longitude > maxLng) {
+        maxLng = point.longitude;
+      }
+    }
+
+    if (minLat == maxLat) {
+      minLat -= 0.0005;
+      maxLat += 0.0005;
+    }
+
+    if (minLng == maxLng) {
+      minLng -= 0.0005;
+      maxLng += 0.0005;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
   }
 
   Future<bool> _confirmEndTrip(BuildContext context) async {
@@ -661,6 +931,10 @@ class _ActiveTripPanel extends StatelessWidget {
   final Future<void> Function() onPauseResume;
   final Future<void> Function() onCancelTrip;
   final Future<bool> Function() onSlideToEnd;
+  final String? routeDistanceLabel;
+  final String? routeEtaLabel;
+  final bool hasLiveRoute;
+  final bool routeLoading;
 
   const _ActiveTripPanel({
     required this.state,
@@ -670,10 +944,19 @@ class _ActiveTripPanel extends StatelessWidget {
     required this.onPauseResume,
     required this.onCancelTrip,
     required this.onSlideToEnd,
+    required this.routeDistanceLabel,
+    required this.routeEtaLabel,
+    required this.hasLiveRoute,
+    required this.routeLoading,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveDistance =
+        (routeDistanceLabel ?? '').trim().isNotEmpty
+        ? routeDistanceLabel!
+        : state.formattedDistance;
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.whiteColor,
@@ -753,7 +1036,7 @@ class _ActiveTripPanel extends StatelessWidget {
                   _MetricTile(
                     icon: Icons.straighten_rounded,
                     label: 'Distance',
-                    value: state.formattedDistance,
+                    value: effectiveDistance,
                     color: AppColors.primaryColor,
                   ),
                   SizedBox(width: 10.w),
@@ -778,6 +1061,16 @@ class _ActiveTripPanel extends StatelessWidget {
                   ),
                 ],
               ),
+              if (routeLoading || hasLiveRoute || (routeEtaLabel ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: 10.h),
+                  child: _RouteSummaryStrip(
+                    loading: routeLoading,
+                    isLiveRoute: hasLiveRoute,
+                    etaLabel: routeEtaLabel,
+                    distanceLabel: routeDistanceLabel,
+                  ),
+                ),
               SizedBox(height: 18.h),
               Row(
                 children: [
@@ -957,6 +1250,166 @@ class _MiniIndicator extends StatelessWidget {
               color: active ? AppColors.textPrimaryColor : AppColors.grayColor,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteInfoChip extends StatelessWidget {
+  const _RouteInfoChip({
+    required this.loading,
+    required this.failed,
+    required this.distance,
+    required this.eta,
+  });
+
+  final bool loading;
+  final bool failed;
+  final String? distance;
+  final String? eta;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return Skeletonizer(
+        enabled: true,
+        containersColor: AppColors.lightGrayColor,
+        child: Bone(
+          height: 30.h,
+          width: 190.w,
+          borderRadius: BorderRadius.circular(999.r),
+        ),
+      );
+    }
+
+    final hasData = (distance ?? '').trim().isNotEmpty && (eta ?? '').trim().isNotEmpty;
+
+    final label = failed
+        ? 'Using approximate route'
+        : (hasData ? '${distance!} • ETA ${eta!}' : 'Live route ready');
+
+    final color = failed ? AppColors.warningColor : AppColors.primaryColor;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(999.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            failed ? Icons.alt_route_rounded : Icons.navigation_rounded,
+            size: 14.sp,
+            color: color,
+          ),
+          SizedBox(width: 6.w),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteSummaryStrip extends StatelessWidget {
+  const _RouteSummaryStrip({
+    required this.loading,
+    required this.isLiveRoute,
+    required this.etaLabel,
+    required this.distanceLabel,
+  });
+
+  final bool loading;
+  final bool isLiveRoute;
+  final String? etaLabel;
+  final String? distanceLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && !isLiveRoute) {
+      return Skeletonizer(
+        enabled: true,
+        containersColor: AppColors.lightGrayColor,
+        child: Bone(
+          height: 36.h,
+          width: double.infinity,
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+      );
+    }
+
+    final hasLabels =
+        (etaLabel ?? '').trim().isNotEmpty || (distanceLabel ?? '').trim().isNotEmpty;
+
+    if (!hasLabels && !isLiveRoute) {
+      return const SizedBox.shrink();
+    }
+
+    final label = isLiveRoute
+        ? 'Live route'
+        : 'Approximate route';
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: AppColors.scaffoldColor,
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isLiveRoute ? Icons.navigation_rounded : Icons.alt_route_rounded,
+            size: 16.sp,
+            color: isLiveRoute ? AppColors.primaryColor : AppColors.warningColor,
+          ),
+          SizedBox(width: 8.w),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimaryColor,
+            ),
+          ),
+          const Spacer(),
+          if ((distanceLabel ?? '').trim().isNotEmpty)
+            Text(
+              distanceLabel!,
+              style: GoogleFonts.inter(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryColor,
+              ),
+            ),
+          if ((distanceLabel ?? '').trim().isNotEmpty &&
+              (etaLabel ?? '').trim().isNotEmpty)
+            Text(
+              ' • ',
+              style: GoogleFonts.inter(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.grayColor,
+              ),
+            ),
+          if ((etaLabel ?? '').trim().isNotEmpty)
+            Text(
+              'ETA ${etaLabel!}',
+              style: GoogleFonts.inter(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.secondaryColor,
+              ),
+            ),
         ],
       ),
     );
