@@ -24,6 +24,20 @@ class ApiEndpoints {
   static const String tripsCurrent = '/api/trips/current/';
   static const String tripsStats = '/api/trips/stats/';
 
+  static String tripById(int tripId) => '/api/trips/$tripId/';
+
+  static String tripStop(int tripId) => '/api/trips/$tripId/stop/';
+
+  static String tripResume(int tripId) => '/api/trips/$tripId/resume/';
+
+  static String tripFinish(int tripId) => '/api/trips/$tripId/finish/';
+
+  static String tripCancel(int tripId) => '/api/trips/$tripId/cancel/';
+
+  static String tripLocation(int tripId) => '/api/trips/$tripId/location/';
+
+  static String tripEvents(int tripId) => '/api/trips/$tripId/events/';
+
   // Alerts
   static const String alerts = '/api/alerts/';
   static const String alertsStats = '/api/alerts/stats/';
