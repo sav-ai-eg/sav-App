@@ -153,12 +153,22 @@ class _StartTripFormState extends State<StartTripForm> {
                     onClear: () => _clearField(isFromField: false),
                   ),
                   if (_placesError != null &&
+                      AppConstants.hasGoogleMapsApiKey &&
                       _connectivityService.isOnline) ...[
                     SizedBox(height: 12.h),
                     _InfoBanner(
                       text: 'Search is temporarily unavailable',
                       color: AppColors.warningColor,
                       icon: Icons.wifi_off_rounded,
+                    ),
+                  ],
+                  if (!AppConstants.hasGoogleMapsApiKey) ...[
+                    SizedBox(height: 12.h),
+                    const _InfoBanner(
+                      text:
+                          'Maps key is missing. Live search and ETA are disabled.',
+                      color: AppColors.infoColor,
+                      icon: Icons.key_off_rounded,
                     ),
                   ],
                   if (!_connectivityService.isOnline) ...[
@@ -225,7 +235,8 @@ class _StartTripFormState extends State<StartTripForm> {
     final timer = isFromField ? _fromDebounce : _toDebounce;
     timer?.cancel();
 
-    if (!_connectivityService.isOnline ||
+    if (!AppConstants.hasGoogleMapsApiKey ||
+        !_connectivityService.isOnline ||
         trimmedValue.length < AppConstants.placesQueryMinLength) {
       setState(() {
         if (isFromField) {
@@ -269,6 +280,24 @@ class _StartTripFormState extends State<StartTripForm> {
     required bool isFromField,
     required int requestId,
   }) async {
+    if (!AppConstants.hasGoogleMapsApiKey) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _placesError = null;
+        if (isFromField) {
+          _fromSuggestions = const [];
+          _isSearchingFrom = false;
+        } else {
+          _toSuggestions = const [];
+          _isSearchingTo = false;
+        }
+      });
+      return;
+    }
+
     try {
       final location = _locationService.lastPosition;
       final suggestions = await _placesService.autocomplete(
@@ -624,15 +653,21 @@ class _InfoBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(14.r),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 16.sp, color: color),
           SizedBox(width: 8.w),
-          Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w600,
-              color: color,
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+                color: color,
+                height: 1.25,
+              ),
             ),
           ),
         ],
@@ -703,7 +738,10 @@ class _TripMapPreviewCardState extends State<_TripMapPreviewCard> {
       markers.add(
         Marker(
           markerId: const MarkerId('from'),
-          position: LatLng(widget.fromPlace!.latitude!, widget.fromPlace!.longitude!),
+          position: LatLng(
+            widget.fromPlace!.latitude!,
+            widget.fromPlace!.longitude!,
+          ),
           infoWindow: InfoWindow(title: widget.fromPlace!.title),
         ),
       );
@@ -713,7 +751,10 @@ class _TripMapPreviewCardState extends State<_TripMapPreviewCard> {
       markers.add(
         Marker(
           markerId: const MarkerId('to'),
-          position: LatLng(widget.toPlace!.latitude!, widget.toPlace!.longitude!),
+          position: LatLng(
+            widget.toPlace!.latitude!,
+            widget.toPlace!.longitude!,
+          ),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           infoWindow: InfoWindow(title: widget.toPlace!.title),
         ),
@@ -896,7 +937,8 @@ class _TripMapPreviewCardState extends State<_TripMapPreviewCard> {
     final from = widget.fromPlace;
     final to = widget.toPlace;
 
-    if (!widget.isOnline ||
+    if (!AppConstants.hasGoogleMapsApiKey ||
+        !widget.isOnline ||
         from == null ||
         to == null ||
         !from.hasCoordinates ||
@@ -968,6 +1010,10 @@ class _TripMapPreviewCardState extends State<_TripMapPreviewCard> {
   }
 
   String _buildLabel() {
+    if (!AppConstants.hasGoogleMapsApiKey) {
+      return 'Static route preview (Maps key missing)';
+    }
+
     if (_routeData?.hasPath ?? false) {
       final distance = _routeData!.distanceText;
       final duration = _routeData!.durationText;

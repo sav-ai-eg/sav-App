@@ -5,7 +5,12 @@ class AppConstants {
   static const String fontFamily = 'Inter';
 
   /// Keys
-  static const String googleMapsKey = 'AIzaSyAYV6yWdmcUkqgb33sEXKkZMNthrHuXoUg';
+  static const String googleMapsApiKey =
+      'AIzaSyAYV6yWdmcUkqgb33sEXKkZMNthrHuXoUg';
+  static bool get hasGoogleMapsApiKey => googleMapsApiKey.trim().isNotEmpty;
+  static bool get shouldAllowMissingMapsKeyInCurrentBuild => false;
+  static bool get shouldDisableLiveMapsFeatures => false;
+
   static const int placesQueryMinLength = 2;
   static const int placesQueryDebounceMs = 350;
   static const int placesSuggestionsLimit = 5;
@@ -32,8 +37,14 @@ class AppConstants {
   static const String prefDetectionInterval = 'detectionInterval';
   static const String prefDriverId = 'driverId';
   static const String prefDriverName = 'driverName';
+  static const String prefDriverPhone = 'driverPhone';
+  static const String prefDriverLicenseNumber = 'driverLicenseNumber';
+  static const String prefDriverVehiclePlate = 'driverVehiclePlate';
+  static const String prefDriverCompanyName = 'driverCompanyName';
+  static const String prefDriverEmergencyContact = 'driverEmergencyContact';
   static const String prefDriverUsername = 'driverUsername';
   static const String prefDriverRole = 'driverRole';
+  static const String prefNotificationsEnabled = 'notificationsEnabled';
   static const String prefAccessToken = 'accessToken';
   static const String prefRefreshToken = 'refreshToken';
   static const String prefHomeDashboardCache = 'homeDashboardCache';

@@ -19,7 +19,7 @@ class GooglePlacesService {
   }) async {
     final normalizedQuery = query.trim();
     if (normalizedQuery.length < AppConstants.placesQueryMinLength ||
-        AppConstants.googleMapsKey.trim().isEmpty) {
+        !AppConstants.hasGoogleMapsApiKey) {
       return const [];
     }
 
@@ -32,7 +32,7 @@ class GooglePlacesService {
 
     final parameters = <String, String>{
       'input': normalizedQuery,
-      'key': AppConstants.googleMapsKey,
+      'key': AppConstants.googleMapsApiKey,
       'sessiontoken': sessionToken,
       'language': 'en',
       'types': 'geocode',
@@ -83,7 +83,7 @@ class GooglePlacesService {
     required TripPlaceModel place,
     required String sessionToken,
   }) async {
-    if (place.placeId.isEmpty || AppConstants.googleMapsKey.trim().isEmpty) {
+    if (place.placeId.isEmpty || !AppConstants.hasGoogleMapsApiKey) {
       return place;
     }
 
@@ -95,7 +95,7 @@ class GooglePlacesService {
     final uri =
         Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
           'place_id': place.placeId,
-          'key': AppConstants.googleMapsKey,
+          'key': AppConstants.googleMapsApiKey,
           'sessiontoken': sessionToken,
           'language': 'en',
           'fields': 'place_id,name,formatted_address,geometry/location',

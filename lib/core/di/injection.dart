@@ -9,6 +9,8 @@ import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
+import 'package:sav/core/services/trip_live_updates_service.dart';
+import 'package:sav/core/services/trip_navigation_service.dart';
 import 'package:sav/core/di/injection.config.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source_impl.dart';
@@ -114,6 +116,18 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<GoogleDirectionsService>()) {
     getIt.registerLazySingleton<GoogleDirectionsService>(
       () => GoogleDirectionsService(dio: getIt<Dio>()),
+    );
+  }
+
+  if (!getIt.isRegistered<TripNavigationService>()) {
+    getIt.registerLazySingleton<TripNavigationService>(
+      () => TripNavigationService(getIt<GoogleDirectionsService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<TripLiveUpdatesService>()) {
+    getIt.registerLazySingleton<TripLiveUpdatesService>(
+      TripLiveUpdatesService.new,
     );
   }
 

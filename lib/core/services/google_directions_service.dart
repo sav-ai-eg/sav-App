@@ -4,9 +4,34 @@ import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sav/core/constants/app_constants.dart';
 
+class GoogleRouteStep {
+  const GoogleRouteStep({
+    required this.instruction,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.distanceText,
+    required this.durationText,
+    required this.startLocation,
+    required this.endLocation,
+    required this.polylinePoints,
+    this.maneuver = '',
+  });
+
+  final String instruction;
+  final int distanceMeters;
+  final int durationSeconds;
+  final String distanceText;
+  final String durationText;
+  final LatLng startLocation;
+  final LatLng endLocation;
+  final List<LatLng> polylinePoints;
+  final String maneuver;
+}
+
 class GoogleRouteData {
   const GoogleRouteData({
     required this.points,
+    required this.steps,
     required this.distanceMeters,
     required this.durationSeconds,
     required this.distanceText,
@@ -15,6 +40,7 @@ class GoogleRouteData {
   });
 
   final List<LatLng> points;
+  final List<GoogleRouteStep> steps;
   final int distanceMeters;
   final int durationSeconds;
   final String distanceText;
@@ -25,6 +51,7 @@ class GoogleRouteData {
 
   static const GoogleRouteData empty = GoogleRouteData(
     points: <LatLng>[],
+    steps: <GoogleRouteStep>[],
     distanceMeters: 0,
     durationSeconds: 0,
     distanceText: '',
@@ -36,8 +63,7 @@ class GoogleDirectionsService {
   GoogleDirectionsService({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
-  final Map<String, GoogleRouteData> _routeCache =
-      <String, GoogleRouteData>{};
+  final Map<String, GoogleRouteData> _routeCache = <String, GoogleRouteData>{};
 
   Future<GoogleRouteData> getDrivingRoute({
     required double originLatitude,
@@ -45,8 +71,8 @@ class GoogleDirectionsService {
     required double destinationLatitude,
     required double destinationLongitude,
   }) async {
-    if (AppConstants.googleMapsKey.trim().isEmpty) {
-      throw Exception('Google Maps key is missing.');
+    if (!AppConstants.hasGoogleMapsApiKey) {
+      return GoogleRouteData.empty;
     }
 
     final cacheKey = _buildCacheKey(
@@ -61,21 +87,22 @@ class GoogleDirectionsService {
       return cached;
     }
 
-    final uri = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/directions/json',
-      <String, String>{
-        'origin': '${originLatitude.toStringAsFixed(6)},${originLongitude.toStringAsFixed(6)}',
-        'destination': '${destinationLatitude.toStringAsFixed(6)},${destinationLongitude.toStringAsFixed(6)}',
-        'mode': 'driving',
-        'alternatives': 'false',
-        'departure_time': 'now',
-        'traffic_model': 'best_guess',
-        'units': 'metric',
-        'language': 'en',
-        'key': AppConstants.googleMapsKey,
-      },
-    );
+    final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', <
+      String,
+      String
+    >{
+      'origin':
+          '${originLatitude.toStringAsFixed(6)},${originLongitude.toStringAsFixed(6)}',
+      'destination':
+          '${destinationLatitude.toStringAsFixed(6)},${destinationLongitude.toStringAsFixed(6)}',
+      'mode': 'driving',
+      'alternatives': 'false',
+      'departure_time': 'now',
+      'traffic_model': 'best_guess',
+      'units': 'metric',
+      'language': 'en',
+      'key': AppConstants.googleMapsApiKey,
+    });
 
     final response = await _dio.getUri<dynamic>(uri);
     if (response.statusCode != 200) {
@@ -90,7 +117,8 @@ class GoogleDirectionsService {
     }
 
     if (status != 'OK') {
-      final message = (payload['error_message'] ?? 'Unable to load route.').toString();
+      final message = (payload['error_message'] ?? 'Unable to load route.')
+          .toString();
       throw Exception(message);
     }
 
@@ -106,6 +134,7 @@ class GoogleDirectionsService {
 
     var totalDistanceMeters = 0;
     var totalDurationSeconds = 0;
+    final parsedSteps = <GoogleRouteStep>[];
 
     for (final leg in legs) {
       totalDistanceMeters += _toInt(_toMap(leg['distance'])['value']);
@@ -113,19 +142,27 @@ class GoogleDirectionsService {
         _toMap(leg['duration_in_traffic'])['value'],
       );
       final fallbackDuration = _toInt(_toMap(leg['duration'])['value']);
-      totalDurationSeconds +=
-          durationInTraffic > 0 ? durationInTraffic : fallbackDuration;
+      totalDurationSeconds += durationInTraffic > 0
+          ? durationInTraffic
+          : fallbackDuration;
+
+      final legSteps = (leg['steps'] as List<dynamic>? ?? const <dynamic>[])
+          .map(_toMap)
+          .map(_parseStep)
+          .whereType<GoogleRouteStep>();
+
+      parsedSteps.addAll(legSteps);
     }
 
-    final polyline = _toMap(firstRoute['overview_polyline'])['points']
-            ?.toString() ??
-        '';
+    final polyline =
+        _toMap(firstRoute['overview_polyline'])['points']?.toString() ?? '';
     final points = _decodePolyline(polyline);
 
     final bounds = _parseBounds(_toMap(firstRoute['bounds']));
 
     final routeData = GoogleRouteData(
       points: points,
+      steps: parsedSteps,
       distanceMeters: totalDistanceMeters,
       durationSeconds: totalDurationSeconds,
       distanceText: _formatDistance(totalDistanceMeters),
@@ -135,6 +172,59 @@ class GoogleDirectionsService {
 
     _routeCache[cacheKey] = routeData;
     return routeData;
+  }
+
+  GoogleRouteStep? _parseStep(Map<String, dynamic> stepMap) {
+    final start = _parseLatLng(_toMap(stepMap['start_location']));
+    final end = _parseLatLng(_toMap(stepMap['end_location']));
+
+    if (start == null || end == null) {
+      return null;
+    }
+
+    final maneuver = (stepMap['maneuver'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final rawInstruction =
+        (stepMap['html_instructions'] ?? stepMap['instructions'] ?? '')
+            .toString();
+
+    final instruction = _sanitizeInstruction(rawInstruction);
+    final distanceMeters = _toInt(_toMap(stepMap['distance'])['value']);
+    final durationSeconds = _toInt(_toMap(stepMap['duration'])['value']);
+
+    final distanceText = (_toMap(stepMap['distance'])['text'] ?? '')
+        .toString()
+        .trim();
+    final durationText = (_toMap(stepMap['duration'])['text'] ?? '')
+        .toString()
+        .trim();
+
+    final polylineEncoded = (_toMap(stepMap['polyline'])['points'] ?? '')
+        .toString();
+    var polylinePoints = _decodePolyline(polylineEncoded);
+    if (polylinePoints.length < 2) {
+      polylinePoints = <LatLng>[start, end];
+    }
+
+    return GoogleRouteStep(
+      instruction: instruction.isNotEmpty
+          ? instruction
+          : _fallbackInstruction(maneuver),
+      distanceMeters: distanceMeters,
+      durationSeconds: durationSeconds,
+      distanceText: distanceText.isNotEmpty
+          ? distanceText
+          : _formatDistance(distanceMeters),
+      durationText: durationText.isNotEmpty
+          ? durationText
+          : _formatDuration(durationSeconds),
+      startLocation: start,
+      endLocation: end,
+      polylinePoints: polylinePoints,
+      maneuver: maneuver,
+    );
   }
 
   String _buildCacheKey({
@@ -185,6 +275,69 @@ class GoogleDirectionsService {
       return value.toInt();
     }
     return int.tryParse((value ?? '').toString()) ?? 0;
+  }
+
+  LatLng? _parseLatLng(Map<String, dynamic> locationMap) {
+    if (locationMap.isEmpty) {
+      return null;
+    }
+
+    final latitude = _toDouble(locationMap['lat']);
+    final longitude = _toDouble(locationMap['lng']);
+    if (latitude == null || longitude == null) {
+      return null;
+    }
+
+    return LatLng(latitude, longitude);
+  }
+
+  String _sanitizeInstruction(String raw) {
+    if (raw.trim().isEmpty) {
+      return '';
+    }
+
+    var value = raw.replaceAll(RegExp(r'<[^>]*>'), ' ');
+    const htmlEntities = <String, String>{
+      '&nbsp;': ' ',
+      '&amp;': '&',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&apos;': "'",
+      '&lt;': '<',
+      '&gt;': '>',
+    };
+
+    for (final entry in htmlEntities.entries) {
+      value = value.replaceAll(entry.key, entry.value);
+    }
+
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _fallbackInstruction(String maneuver) {
+    if (maneuver.trim().isEmpty) {
+      return 'Continue straight';
+    }
+
+    final words = maneuver
+        .replaceAll('-', ' ')
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((part) => part.trim().isNotEmpty)
+        .map((part) {
+          final normalized = part.trim().toLowerCase();
+          if (normalized.isEmpty) {
+            return normalized;
+          }
+          return '${normalized[0].toUpperCase()}${normalized.substring(1)}';
+        })
+        .join(' ');
+
+    if (words.isEmpty) {
+      return 'Continue straight';
+    }
+
+    return words;
   }
 
   List<LatLng> _decodePolyline(String encoded) {

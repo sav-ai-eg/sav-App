@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:injectable/injectable.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
+import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/features/history/data/models/trip_history_model.dart';
 import 'package:sav/features/trip/domain/usecases/load_driver_trip_history_use_case.dart';
 
@@ -16,11 +18,26 @@ class HistoryCubit extends Cubit<HistoryState> {
     this._loadDriverTripHistoryUseCase,
     this._offlineCacheService,
     this._connectivityService,
-  ) : super(const HistoryInitial());
+  ) : super(const HistoryInitial()) {
+    final tripUpdatesService = _tripLiveUpdates;
+    if (tripUpdatesService != null) {
+      _tripUpdatesSubscription = tripUpdatesService.stream.listen(
+        _onTripLiveUpdate,
+      );
+    }
+  }
 
   final LoadDriverTripHistoryUseCase _loadDriverTripHistoryUseCase;
   final OfflineCacheService _offlineCacheService;
   final ConnectivityService _connectivityService;
+
+  TripLiveUpdatesService? get _tripLiveUpdates =>
+      GetIt.instance.isRegistered<TripLiveUpdatesService>()
+      ? GetIt.instance<TripLiveUpdatesService>()
+      : null;
+
+  StreamSubscription<TripLiveUpdateEvent>? _tripUpdatesSubscription;
+  Timer? _liveRefreshDebounce;
 
   final List<TripHistoryModel> _allTrips = [];
   List<TripHistoryModel> _filteredTrips = [];
@@ -33,18 +50,26 @@ class HistoryCubit extends Cubit<HistoryState> {
 
   String? get activeFilter => _activeFilter;
 
-  Future<void> loadHistory() async {
-    emit(const HistoryLoading());
+  Future<void> loadHistory({bool silent = false}) async {
+    final shouldShowLoading =
+        !silent || _allTrips.isEmpty || state is HistoryInitial;
+
+    if (shouldShowLoading) {
+      emit(const HistoryLoading());
+    }
 
     final cachedTrips = _readCachedTrips();
 
     if (!_connectivityService.isOnline) {
       if (cachedTrips.isEmpty) {
-        emit(
-          const HistoryError(
-            message: 'No internet connection and no cached history available.',
-          ),
-        );
+        if (!silent || _allTrips.isEmpty) {
+          emit(
+            const HistoryError(
+              message:
+                  'No internet connection and no cached history available.',
+            ),
+          );
+        }
         return;
       }
 
@@ -75,7 +100,9 @@ class HistoryCubit extends Cubit<HistoryState> {
           return;
         }
 
-        emit(HistoryError(message: _mapFailureMessage(failure)));
+        if (!silent || _allTrips.isEmpty) {
+          emit(HistoryError(message: _mapFailureMessage(failure)));
+        }
       },
       (trips) {
         final items = trips
@@ -100,6 +127,21 @@ class HistoryCubit extends Cubit<HistoryState> {
         );
       },
     );
+  }
+
+  void _onTripLiveUpdate(TripLiveUpdateEvent event) {
+    if (!event.shouldRefreshHistory || isClosed) {
+      return;
+    }
+
+    _liveRefreshDebounce?.cancel();
+    _liveRefreshDebounce = Timer(const Duration(milliseconds: 900), () {
+      if (isClosed) {
+        return;
+      }
+
+      unawaited(loadHistory(silent: true));
+    });
   }
 
   void searchByDate(String query) {
@@ -150,7 +192,9 @@ class HistoryCubit extends Cubit<HistoryState> {
 
     return rawItems
         .map(TripHistoryModel.fromCacheMap)
-        .where((trip) => trip.from.trim().isNotEmpty || trip.to.trim().isNotEmpty)
+        .where(
+          (trip) => trip.from.trim().isNotEmpty || trip.to.trim().isNotEmpty,
+        )
         .toList(growable: false);
   }
 
@@ -194,11 +238,7 @@ class HistoryCubit extends Cubit<HistoryState> {
     }).toList();
 
     if (_filteredTrips.isEmpty) {
-      emit(
-        HistoryEmpty(
-          message: _resolveEmptyMessage(),
-        ),
-      );
+      emit(HistoryEmpty(message: _resolveEmptyMessage()));
       return;
     }
 
@@ -256,5 +296,12 @@ class HistoryCubit extends Cubit<HistoryState> {
     }
 
     return message;
+  }
+
+  @override
+  Future<void> close() {
+    _tripUpdatesSubscription?.cancel();
+    _liveRefreshDebounce?.cancel();
+    return super.close();
   }
 }

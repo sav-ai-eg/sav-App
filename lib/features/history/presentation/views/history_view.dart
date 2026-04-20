@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/di/injection.dart';
 import 'package:sav/core/widgets/sav_components.dart';
+import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/history/presentation/cubit/history_cubit.dart';
 import 'package:sav/features/history/presentation/views/widgets/history_empty_widget.dart';
 import 'package:sav/features/history/presentation/views/widgets/history_search_bar.dart';
@@ -25,109 +27,193 @@ class HistoryView extends StatelessWidget {
   }
 }
 
-class _HistoryBody extends StatelessWidget {
+class _HistoryBody extends StatefulWidget {
   const _HistoryBody();
+
+  @override
+  State<_HistoryBody> createState() => _HistoryBodyState();
+}
+
+class _HistoryBodyState extends State<_HistoryBody> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      context.read<BottomNavCubit>().setHideNavBar(false);
+    });
+  }
+
+  @override
+  void dispose() {
+    if (mounted) {
+      context.read<BottomNavCubit>().setHideNavBar(false);
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  bool _handleScroll(UserScrollNotification notification) {
+    if (!mounted || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final navCubit = context.read<BottomNavCubit>();
+
+    switch (notification.direction) {
+      case ScrollDirection.reverse:
+        navCubit.setHideNavBar(true);
+        break;
+      case ScrollDirection.forward:
+        navCubit.setHideNavBar(false);
+        break;
+      case ScrollDirection.idle:
+        if (notification.metrics.pixels <= 0) {
+          navCubit.setHideNavBar(false);
+        }
+        break;
+    }
+
+    return false;
+  }
+
+  List<Widget> _buildHeaderSlivers() {
+    return <Widget>[
+      SliverToBoxAdapter(child: SizedBox(height: 24.h)),
+      SliverToBoxAdapter(
+        child: Center(
+          child: Text(
+            'History',
+            style: GoogleFonts.inter(
+              fontSize: 24.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.blackColor.withValues(alpha: 0.8),
+              letterSpacing: -0.264,
+            ),
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+      SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: 16.w),
+        sliver: const SliverToBoxAdapter(child: HistorySearchBar()),
+      ),
+      SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+      SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: 16.w),
+        sliver: const SliverToBoxAdapter(child: HistoryFilterRow()),
+      ),
+      SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+    ];
+  }
+
+  Widget _buildScrollableHistory({required List<Widget> slivers}) {
+    return NotificationListener<UserScrollNotification>(
+      onNotification: _handleScroll,
+      child: RefreshIndicator(
+        color: AppColors.primaryColor,
+        onRefresh: () => context.read<HistoryCubit>().loadHistory(),
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            ...slivers,
+            SliverToBoxAdapter(child: SizedBox(height: 120.h)),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
       body: SafeArea(
-        child: Column(
-          children: [
-            SizedBox(height: 24.h),
-
-            /// Title
-            Center(
-              child: Text(
-                'History',
-                style: GoogleFonts.inter(
-                  fontSize: 24.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackColor.withValues(alpha: 0.8),
-                  letterSpacing: -0.264,
-                ),
-              ),
-            ),
-
-            SizedBox(height: 16.h),
-
-            /// Content
-            Expanded(
-              child: Padding(
+        child: BlocBuilder<HistoryCubit, HistoryState>(
+          builder: (context, state) {
+            if (state is HistoryLoading) {
+              return Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child: BlocBuilder<HistoryCubit, HistoryState>(
-                  builder: (context, state) {
-                    if (state is HistoryLoading) {
-                      return const _HistoryLoadingSkeleton();
-                    }
+                child: const _HistoryLoadingSkeleton(),
+              );
+            }
 
-                    if (state is HistoryError) {
-                      return SeenErrorWidget(
+            if (state is HistoryError) {
+              return _buildScrollableHistory(
+                slivers: [
+                  ..._buildHeaderSlivers(),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      child: SeenErrorWidget(
                         message: state.message,
-                        onRetry: () => context.read<HistoryCubit>().loadHistory(),
-                      );
-                    }
+                        onRetry: () =>
+                            context.read<HistoryCubit>().loadHistory(),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
 
-                    return Column(
-                      children: [
-                        /// Search bar
-                        const HistorySearchBar(),
+            if (state is HistoryLoaded) {
+              return _buildScrollableHistory(
+                slivers: [
+                  ..._buildHeaderSlivers(),
+                  if (state.noticeMessage != null)
+                    SliverPadding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      sliver: SliverToBoxAdapter(
+                        child: _HistoryCacheNotice(
+                          message: state.noticeMessage!,
+                          cachedAt: state.cachedAt,
+                          isFromCache: state.isFromCache,
+                        ),
+                      ),
+                    ),
+                  if (state.noticeMessage != null)
+                    SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: 16.h),
+                          child: TripHistoryCard(trip: state.trips[index]),
+                        );
+                      }, childCount: state.trips.length),
+                    ),
+                  ),
+                ],
+              );
+            }
 
-                        SizedBox(height: 16.h),
-
-                        /// Filters
-                        const HistoryFilterRow(),
-
-                        SizedBox(height: 16.h),
-
-                        /// Trip cards or empty state
-                        if (state is HistoryLoaded)
-                          Expanded(
-                            child: RefreshIndicator(
-                              color: AppColors.primaryColor,
-                              onRefresh: () =>
-                                  context.read<HistoryCubit>().loadHistory(),
-                              child: ListView.separated(
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: state.trips.length +
-                                    (state.noticeMessage == null ? 0 : 1),
-                                separatorBuilder: (_, __) =>
-                                    SizedBox(height: 16.h),
-                                itemBuilder: (context, index) {
-                                  if (state.noticeMessage != null &&
-                                      index == 0) {
-                                    return _HistoryCacheNotice(
-                                      message: state.noticeMessage!,
-                                      cachedAt: state.cachedAt,
-                                      isFromCache: state.isFromCache,
-                                    );
-                                  }
-
-                                  final shift =
-                                      state.noticeMessage == null ? 0 : 1;
-                                  return TripHistoryCard(
-                                    trip: state.trips[index - shift],
-                                  );
-                                },
-                              ),
-                            ),
-                          )
-                        else
-                          Expanded(
-                            child: HistoryEmptyWidget(
-                              message: state is HistoryEmpty
-                                  ? state.message
-                                  : 'No history found yet.',
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+            return _buildScrollableHistory(
+              slivers: [
+                ..._buildHeaderSlivers(),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    child: HistoryEmptyWidget(
+                      message: state is HistoryEmpty
+                          ? state.message
+                          : 'No history found yet.',
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );

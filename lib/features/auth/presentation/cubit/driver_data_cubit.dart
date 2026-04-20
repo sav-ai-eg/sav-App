@@ -54,6 +54,20 @@ class DriverDataCubit extends Cubit<DriverDataState> {
       // Save driver ID locally
       await _prefs.setString(AppConstants.prefDriverId, driverId);
       await _prefs.setString(AppConstants.prefDriverName, name);
+      await _prefs.setString(AppConstants.prefDriverPhone, phone);
+      await _prefs.setString(
+        AppConstants.prefDriverLicenseNumber,
+        licenseNumber,
+      );
+      await _prefs.setString(AppConstants.prefDriverVehiclePlate, vehiclePlate);
+      await _prefs.setString(
+        AppConstants.prefDriverCompanyName,
+        companyName ?? '',
+      );
+      await _prefs.setString(
+        AppConstants.prefDriverEmergencyContact,
+        emergencyContact ?? '',
+      );
 
       emit(DriverDataSaved(driver: driver));
     } catch (e) {

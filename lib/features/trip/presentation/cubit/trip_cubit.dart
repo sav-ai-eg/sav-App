@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
 import 'package:sav/core/constants/app_constants.dart';
@@ -12,6 +13,7 @@ import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/tflite_detection_service.dart';
+import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
@@ -68,6 +70,11 @@ class TripCubit extends Cubit<TripState> {
   final OfflineCacheService _offlineCache;
   final ConnectivityService _connectivity;
 
+  TripLiveUpdatesService? get _tripLiveUpdates =>
+      GetIt.instance.isRegistered<TripLiveUpdatesService>()
+      ? GetIt.instance<TripLiveUpdatesService>()
+      : null;
+
   TripEntity? _activeTrip;
   Timer? _detectionTimer;
   Timer? _locationUpdateTimer;
@@ -121,6 +128,11 @@ class TripCubit extends Cubit<TripState> {
         await _initializeSubsystems(
           initialLatitude: trip.currentLatitude ?? trip.fromLatitude,
           initialLongitude: trip.currentLongitude ?? trip.fromLongitude,
+        );
+
+        _tripLiveUpdates?.emit(
+          type: TripLiveUpdateType.resumed,
+          tripId: trip.tripIdOrZero,
         );
       },
     );
@@ -176,13 +188,13 @@ class TripCubit extends Cubit<TripState> {
           final message = _mapFailureMessage(failure);
           if (_isActiveTripConflict(message)) {
             await restoreCurrentTrip();
-                emit(
-                  const TripError(
-                    message:
-                        'You already have an active trip. Finish or cancel it before starting a new one.',
-                    keepNavigationHidden: true,
-                  ),
-                );
+            emit(
+              const TripError(
+                message:
+                    'You already have an active trip. Finish or cancel it before starting a new one.',
+                keepNavigationHidden: true,
+              ),
+            );
             return;
           }
 
@@ -197,6 +209,11 @@ class TripCubit extends Cubit<TripState> {
           await _initializeSubsystems(
             initialLatitude: startLatitude,
             initialLongitude: startLongitude,
+          );
+
+          _tripLiveUpdates?.emit(
+            type: TripLiveUpdateType.started,
+            tripId: trip.tripIdOrZero,
           );
         },
       );
@@ -239,6 +256,10 @@ class TripCubit extends Cubit<TripState> {
       (updatedTrip) {
         _activeTrip = updatedTrip;
         _detectionTimer?.cancel();
+        _tripLiveUpdates?.emit(
+          type: TripLiveUpdateType.paused,
+          tripId: updatedTrip.tripIdOrZero,
+        );
         _updateActiveState(
           detectionStatus: DetectionStatus.offline,
           isActionInProgress: false,
@@ -280,6 +301,10 @@ class TripCubit extends Cubit<TripState> {
         if (_cameraService.isInitialized && _detectionService.isInitialized) {
           _startDetectionLoop();
         }
+        _tripLiveUpdates?.emit(
+          type: TripLiveUpdateType.resumed,
+          tripId: updatedTrip.tripIdOrZero,
+        );
         _updateActiveState(
           detectionStatus: DetectionStatus.safe,
           isActionInProgress: false,
@@ -324,6 +349,11 @@ class TripCubit extends Cubit<TripState> {
         _activeTrip = null;
         _resetCounters();
         emit(summary);
+
+        _tripLiveUpdates?.emit(
+          type: TripLiveUpdateType.cancelled,
+          tripId: updatedTrip.tripIdOrZero,
+        );
       },
     );
   }
@@ -624,6 +654,7 @@ class TripCubit extends Cubit<TripState> {
 
       final synced = result.fold((_) => false, (_) => true);
       if (synced) {
+        _tripLiveUpdates?.emitProgress(tripId: tripId);
         return;
       }
     }
@@ -656,6 +687,8 @@ class TripCubit extends Cubit<TripState> {
     }
 
     try {
+      var syncedAny = false;
+
       final alerts = await _offlineCache.drainAlerts();
       for (final rawAlert in alerts) {
         final item = Map<String, dynamic>.from(rawAlert);
@@ -679,6 +712,8 @@ class TripCubit extends Cubit<TripState> {
         final synced = result.fold((_) => false, (_) => true);
         if (!synced) {
           await _offlineCache.cacheAlert(item);
+        } else {
+          syncedAny = true;
         }
       }
 
@@ -705,10 +740,19 @@ class TripCubit extends Cubit<TripState> {
         final synced = result.fold((_) => false, (_) => true);
         if (!synced) {
           await _offlineCache.cacheLocation(item);
+        } else {
+          syncedAny = true;
         }
       }
 
       _updateActiveState(pendingSyncCount: _offlineCache.totalPendingCount);
+
+      if (syncedAny) {
+        _tripLiveUpdates?.emit(
+          type: TripLiveUpdateType.synced,
+          tripId: _activeTrip?.tripIdOrZero,
+        );
+      }
     } catch (error) {
       debugPrint('Pending sync failed: $error');
     }
@@ -733,8 +777,11 @@ class TripCubit extends Cubit<TripState> {
     try {
       final fallbackPosition = await _locationService.getCurrentPosition();
       final latitude =
-          _lastPosition?.latitude ?? fallbackPosition?.latitude ?? snapshot.latitude;
-      final longitude = _lastPosition?.longitude ??
+          _lastPosition?.latitude ??
+          fallbackPosition?.latitude ??
+          snapshot.latitude;
+      final longitude =
+          _lastPosition?.longitude ??
           fallbackPosition?.longitude ??
           snapshot.longitude;
 
@@ -765,6 +812,11 @@ class TripCubit extends Cubit<TripState> {
           _activeTrip = null;
           _resetCounters();
           emit(summary);
+
+          _tripLiveUpdates?.emit(
+            type: TripLiveUpdateType.finished,
+            tripId: finishedTrip.tripIdOrZero,
+          );
         },
       );
     } catch (error) {
@@ -790,10 +842,12 @@ class TripCubit extends Cubit<TripState> {
         : (trip?.awakePercentage ?? 100.0);
 
     return TripEnded(
-      duration:
-          (trip?.duration ?? '').trim().isNotEmpty ? trip!.duration : fallbackDuration,
-      distance:
-          (trip?.distance ?? '').trim().isNotEmpty ? trip!.distance : fallbackDistance,
+      duration: (trip?.duration ?? '').trim().isNotEmpty
+          ? trip!.duration
+          : fallbackDuration,
+      distance: (trip?.distance ?? '').trim().isNotEmpty
+          ? trip!.distance
+          : fallbackDistance,
       alertCount: _alertCount,
       awakePercentage: awake,
       wasCancelled: wasCancelled,
@@ -1011,7 +1065,9 @@ class TripCubit extends Cubit<TripState> {
       return 'Only active or paused trips can be finished.';
     }
 
-    if (normalized.contains('location updates are allowed only for active trips')) {
+    if (normalized.contains(
+      'location updates are allowed only for active trips',
+    )) {
       return 'Location updates are allowed only while the trip is active.';
     }
 

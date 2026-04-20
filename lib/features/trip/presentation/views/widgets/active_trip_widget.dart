@@ -4,12 +4,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/services/google_directions_service.dart';
+import 'package:sav/core/services/trip_navigation_service.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
@@ -34,8 +34,6 @@ class ActiveTripWidget extends StatefulWidget {
 
 class _ActiveTripWidgetState extends State<ActiveTripWidget>
     with SingleTickerProviderStateMixin {
-  static const double _routeRefreshMinDistanceMeters = 80;
-
   late Timer _timer;
   Duration _elapsed = Duration.zero;
   GoogleMapController? _mapController;
@@ -43,15 +41,15 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   late Animation<double> _alertOpacity;
   bool _isProcessingAction = false;
 
-  final GoogleDirectionsService _directionsService =
-      GetIt.instance<GoogleDirectionsService>();
+  final TripNavigationService _navigationService =
+      GetIt.instance<TripNavigationService>();
 
   Timer? _routeDebounce;
   GoogleRouteData? _routeData;
+  TripNavigationSnapshot? _navigationSnapshot;
   bool _isRouteLoading = false;
   bool _routeFailed = false;
   int _routeRequestId = 0;
-  LatLng? _lastRouteOrigin;
 
   @override
   void initState() {
@@ -84,23 +82,23 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     final latitude = widget.state.latitude;
     final longitude = widget.state.longitude;
     final destinationChanged =
-      oldWidget.state.trip.toLatitude != widget.state.trip.toLatitude ||
-      oldWidget.state.trip.toLongitude != widget.state.trip.toLongitude;
+        oldWidget.state.trip.toLatitude != widget.state.trip.toLatitude ||
+        oldWidget.state.trip.toLongitude != widget.state.trip.toLongitude;
+    final locationChanged =
+        latitude != oldWidget.state.latitude ||
+        longitude != oldWidget.state.longitude;
 
     if (latitude != null &&
         longitude != null &&
         _mapController != null &&
-        (latitude != oldWidget.state.latitude ||
-            longitude != oldWidget.state.longitude)) {
+        locationChanged) {
       _mapController!.animateCamera(
         CameraUpdate.newLatLng(LatLng(latitude, longitude)),
       );
     }
 
-    final movedSignificantly =
-        _hasSignificantMovement(oldWidget: oldWidget, latitude: latitude, longitude: longitude);
-    if (destinationChanged || movedSignificantly) {
-      _scheduleRouteRefresh();
+    if (destinationChanged || locationChanged) {
+      _scheduleRouteRefresh(force: destinationChanged);
     }
 
     if (widget.dangerAlert != null && oldWidget.dangerAlert == null) {
@@ -117,6 +115,7 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   void dispose() {
     _timer.cancel();
     _routeDebounce?.cancel();
+    unawaited(_navigationService.resetSession());
     _mapController?.dispose();
     _alertAnimController.dispose();
     super.dispose();
@@ -180,14 +179,12 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                           ? null
                           : _showEventsTimeline,
                       style: IconButton.styleFrom(
-                        backgroundColor:
-                            AppColors.darkGrayColor.withValues(alpha: 0.74),
+                        backgroundColor: AppColors.darkGrayColor.withValues(
+                          alpha: 0.74,
+                        ),
                         foregroundColor: Colors.white,
                       ),
-                      icon: Icon(
-                        Icons.timeline_rounded,
-                        size: 18.sp,
-                      ),
+                      icon: Icon(Icons.timeline_rounded, size: 18.sp),
                     ),
                     SizedBox(width: 8.w),
                     _DarkGlassChip(
@@ -226,7 +223,20 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                     ],
                   ),
                 ),
-                if (_isRouteLoading || (_routeData?.hasPath ?? false) || _routeFailed)
+                if (_isRouteLoading ||
+                    _navigationSnapshot != null ||
+                    _routeFailed)
+                  Padding(
+                    padding: EdgeInsets.only(top: 8.h),
+                    child: _NavigationTurnBanner(
+                      snapshot: _navigationSnapshot,
+                      loading: _isRouteLoading,
+                      failed: _routeFailed,
+                    ),
+                  ),
+                if (_isRouteLoading ||
+                    (_routeData?.hasPath ?? false) ||
+                    _routeFailed)
                   Padding(
                     padding: EdgeInsets.only(top: 8.h),
                     child: Align(
@@ -234,8 +244,15 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                       child: _RouteInfoChip(
                         loading: _isRouteLoading,
                         failed: _routeFailed,
-                        distance: _routeData?.distanceText,
-                        eta: _routeData?.durationText,
+                        distance:
+                            _navigationSnapshot?.remainingDistanceText ??
+                            _routeData?.distanceText,
+                        eta:
+                            _navigationSnapshot?.remainingDurationText ??
+                            _routeData?.durationText,
+                        isApiKeyMissing:
+                            _navigationSnapshot?.isApiKeyMissing ?? false,
+                        rerouting: _navigationSnapshot?.didReroute ?? false,
                       ),
                     ),
                   ),
@@ -279,8 +296,12 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
             onPauseResume: _handlePauseResume,
             onCancelTrip: _handleCancelTrip,
             onSlideToEnd: () => _confirmEndTrip(context),
-            routeDistanceLabel: _routeData?.distanceText,
-            routeEtaLabel: _routeData?.durationText,
+            routeDistanceLabel:
+                _navigationSnapshot?.remainingDistanceText ??
+                _routeData?.distanceText,
+            routeEtaLabel:
+                _navigationSnapshot?.remainingDurationText ??
+                _routeData?.durationText,
             hasLiveRoute: _routeData?.hasPath ?? false,
             routeLoading: _isRouteLoading,
           ),
@@ -410,8 +431,7 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
 
   Set<Polyline> _buildPolylines(LatLng driverPosition) {
     final trip = widget.state.trip;
-    final destination =
-        trip.toLatitude != null && trip.toLongitude != null
+    final destination = trip.toLatitude != null && trip.toLongitude != null
         ? LatLng(trip.toLatitude!, trip.toLongitude!)
         : null;
 
@@ -443,28 +463,6 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     };
   }
 
-  bool _hasSignificantMovement({
-    required ActiveTripWidget oldWidget,
-    required double? latitude,
-    required double? longitude,
-  }) {
-    final oldLat = oldWidget.state.latitude;
-    final oldLng = oldWidget.state.longitude;
-
-    if (latitude == null || longitude == null || oldLat == null || oldLng == null) {
-      return false;
-    }
-
-    final movedMeters = Geolocator.distanceBetween(
-      oldLat,
-      oldLng,
-      latitude,
-      longitude,
-    );
-
-    return movedMeters >= _routeRefreshMinDistanceMeters;
-  }
-
   void _scheduleRouteRefresh({bool force = false}) {
     final endpoints = _resolveRouteEndpoints();
     if (endpoints == null) {
@@ -472,8 +470,11 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
         return;
       }
 
+      unawaited(_navigationService.resetSession());
+
       setState(() {
         _routeData = null;
+        _navigationSnapshot = null;
         _isRouteLoading = false;
         _routeFailed = false;
       });
@@ -484,12 +485,19 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     final requestId = ++_routeRequestId;
 
     if (force) {
-      unawaited(_refreshRoute(endpoints.origin, endpoints.destination, requestId));
+      unawaited(
+        _refreshRoute(
+          endpoints.origin,
+          endpoints.destination,
+          requestId,
+          forceReroute: true,
+        ),
+      );
       return;
     }
 
     _routeDebounce = Timer(
-      const Duration(milliseconds: 850),
+      const Duration(milliseconds: 420),
       () => unawaited(
         _refreshRoute(endpoints.origin, endpoints.destination, requestId),
       ),
@@ -499,65 +507,60 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
   Future<void> _refreshRoute(
     LatLng origin,
     LatLng destination,
-    int requestId,
-  ) async {
-    if (_lastRouteOrigin != null) {
-      final movedMeters = Geolocator.distanceBetween(
-        _lastRouteOrigin!.latitude,
-        _lastRouteOrigin!.longitude,
-        origin.latitude,
-        origin.longitude,
-      );
-
-      if (movedMeters < _routeRefreshMinDistanceMeters && _routeData != null) {
-        return;
-      }
-    }
+    int requestId, {
+    bool forceReroute = false,
+  }) async {
+    final hadLiveRoute = _routeData?.hasPath ?? false;
 
     if (mounted) {
       setState(() {
-        _isRouteLoading = true;
+        _isRouteLoading = forceReroute || _routeData == null;
         _routeFailed = false;
       });
     }
 
     try {
-      final route = await _directionsService.getDrivingRoute(
-        originLatitude: origin.latitude,
-        originLongitude: origin.longitude,
-        destinationLatitude: destination.latitude,
-        destinationLongitude: destination.longitude,
+      final snapshot = await _navigationService.updateNavigation(
+        currentPosition: origin,
+        destination: destination,
+        isOnline: widget.state.isOnline,
+        forceReroute: forceReroute,
       );
 
       if (!mounted || requestId != _routeRequestId) {
         return;
       }
 
-      _lastRouteOrigin = origin;
       setState(() {
-        _routeData = route.hasPath ? route : null;
+        _navigationSnapshot = snapshot;
+        _routeData = snapshot.routeData.hasPath ? snapshot.routeData : null;
         _isRouteLoading = false;
-        _routeFailed = !route.hasPath;
+        _routeFailed =
+            !snapshot.routeData.hasPath &&
+            !snapshot.isApiKeyMissing &&
+            widget.state.isOnline;
       });
 
-      _fitCameraToRoute();
+      final shouldRefitCamera =
+          !hadLiveRoute || snapshot.didReroute || forceReroute;
+      if (shouldRefitCamera) {
+        _fitCameraToRoute();
+      }
     } catch (_) {
       if (!mounted || requestId != _routeRequestId) {
         return;
       }
 
       setState(() {
-        _routeData = null;
         _isRouteLoading = false;
-        _routeFailed = true;
+        _routeFailed = _routeData == null;
       });
     }
   }
 
   ({LatLng origin, LatLng destination})? _resolveRouteEndpoints() {
     final trip = widget.state.trip;
-    final destination =
-        trip.toLatitude != null && trip.toLongitude != null
+    final destination = trip.toLatitude != null && trip.toLongitude != null
         ? LatLng(trip.toLatitude!, trip.toLongitude!)
         : null;
 
@@ -592,9 +595,9 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
     }
 
     unawaited(
-      controller.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 90),
-      ).catchError((_) {}),
+      controller
+          .animateCamera(CameraUpdate.newLatLngBounds(bounds, 90))
+          .catchError((_) {}),
     );
 
     return true;
@@ -952,8 +955,7 @@ class _ActiveTripPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveDistance =
-        (routeDistanceLabel ?? '').trim().isNotEmpty
+    final effectiveDistance = (routeDistanceLabel ?? '').trim().isNotEmpty
         ? routeDistanceLabel!
         : state.formattedDistance;
 
@@ -1061,7 +1063,9 @@ class _ActiveTripPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              if (routeLoading || hasLiveRoute || (routeEtaLabel ?? '').trim().isNotEmpty)
+              if (routeLoading ||
+                  hasLiveRoute ||
+                  (routeEtaLabel ?? '').trim().isNotEmpty)
                 Padding(
                   padding: EdgeInsets.only(top: 10.h),
                   child: _RouteSummaryStrip(
@@ -1105,9 +1109,7 @@ class _ActiveTripPanel extends StatelessWidget {
                 label: 'Slide to end',
                 icon: Icons.chevron_right_rounded,
                 isLoading: isEnding,
-                onSubmit: actionBusy
-                    ? () async => false
-                    : onSlideToEnd,
+                onSubmit: actionBusy ? () async => false : onSlideToEnd,
               ),
             ],
           ),
@@ -1256,18 +1258,252 @@ class _MiniIndicator extends StatelessWidget {
   }
 }
 
+class _NavigationTurnBanner extends StatelessWidget {
+  const _NavigationTurnBanner({
+    required this.snapshot,
+    required this.loading,
+    required this.failed,
+  });
+
+  final TripNavigationSnapshot? snapshot;
+  final bool loading;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && snapshot == null) {
+      return Skeletonizer(
+        enabled: true,
+        containersColor: AppColors.lightGrayColor,
+        child: Bone(
+          height: 56.h,
+          width: double.infinity,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+      );
+    }
+
+    final currentSnapshot = snapshot;
+    if (currentSnapshot == null) {
+      if (!failed) {
+        return const SizedBox.shrink();
+      }
+
+      return _buildHintCard(
+        icon: Icons.alt_route_rounded,
+        color: AppColors.warningColor,
+        title: 'Using approximate route',
+        subtitle: 'Live turn-by-turn guidance is temporarily unavailable.',
+      );
+    }
+
+    if (currentSnapshot.isApiKeyMissing) {
+      return _buildHintCard(
+        icon: Icons.key_off_rounded,
+        color: AppColors.warningColor,
+        title: 'Maps key is not configured',
+        subtitle:
+            'Live navigation is disabled for this build. Route fallback is active.',
+      );
+    }
+
+    if (!currentSnapshot.hasTurnGuidance) {
+      if (currentSnapshot.didReroute) {
+        return _buildHintCard(
+          icon: Icons.alt_route_rounded,
+          color: AppColors.primaryColor,
+          title: 'Rerouting...',
+          subtitle: 'Updating guidance from your current location.',
+        );
+      }
+
+      return const SizedBox.shrink();
+    }
+
+    final distanceHint =
+        currentSnapshot.distanceToManeuverMeters <= 40 ||
+            currentSnapshot.distanceToManeuverText.isEmpty
+        ? 'Now'
+        : 'In ${currentSnapshot.distanceToManeuverText}';
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34.w,
+            height: 34.w,
+            decoration: BoxDecoration(
+              color: AppColors.primaryColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10.r),
+            ),
+            child: Icon(
+              _resolveManeuverIcon(currentSnapshot.currentManeuver),
+              size: 19.sp,
+              color: AppColors.primaryColor,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  distanceHint,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryColor,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  currentSnapshot.currentInstruction,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimaryColor,
+                  ),
+                ),
+                if (currentSnapshot.nextInstruction.trim().isNotEmpty) ...[
+                  SizedBox(height: 3.h),
+                  Text(
+                    'Then ${currentSnapshot.nextInstruction}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondaryColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (currentSnapshot.didReroute)
+            Padding(
+              padding: EdgeInsets.only(left: 8.w, top: 2.h),
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color: AppColors.infoColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999.r),
+                ),
+                child: Text(
+                  'Rerouted',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.infoColor,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHintCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16.sp, color: color),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimaryColor,
+                  ),
+                ),
+                SizedBox(height: 1.h),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _resolveManeuverIcon(String maneuver) {
+    final normalized = maneuver.trim().toLowerCase();
+
+    if (normalized.contains('uturn') || normalized.contains('u-turn')) {
+      return Icons.u_turn_left_rounded;
+    }
+
+    if (normalized.contains('left')) {
+      return Icons.turn_left_rounded;
+    }
+
+    if (normalized.contains('right')) {
+      return Icons.turn_right_rounded;
+    }
+
+    if (normalized.contains('merge') ||
+        normalized.contains('fork') ||
+        normalized.contains('ramp')) {
+      return Icons.alt_route_rounded;
+    }
+
+    if (normalized.contains('roundabout')) {
+      return Icons.sync_alt_rounded;
+    }
+
+    return Icons.navigation_rounded;
+  }
+}
+
 class _RouteInfoChip extends StatelessWidget {
   const _RouteInfoChip({
     required this.loading,
     required this.failed,
     required this.distance,
     required this.eta,
+    required this.isApiKeyMissing,
+    required this.rerouting,
   });
 
   final bool loading;
   final bool failed;
   final String? distance;
   final String? eta;
+  final bool isApiKeyMissing;
+  final bool rerouting;
 
   @override
   Widget build(BuildContext context) {
@@ -1283,13 +1519,20 @@ class _RouteInfoChip extends StatelessWidget {
       );
     }
 
-    final hasData = (distance ?? '').trim().isNotEmpty && (eta ?? '').trim().isNotEmpty;
+    final hasData =
+        (distance ?? '').trim().isNotEmpty && (eta ?? '').trim().isNotEmpty;
 
-    final label = failed
+    final label = isApiKeyMissing
+        ? 'Maps key missing'
+        : rerouting
+        ? 'Rerouting...'
+        : failed
         ? 'Using approximate route'
         : (hasData ? '${distance!} • ETA ${eta!}' : 'Live route ready');
 
-    final color = failed ? AppColors.warningColor : AppColors.primaryColor;
+    final color = isApiKeyMissing || failed
+        ? AppColors.warningColor
+        : AppColors.primaryColor;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
@@ -1301,7 +1544,9 @@ class _RouteInfoChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            failed ? Icons.alt_route_rounded : Icons.navigation_rounded,
+            isApiKeyMissing || failed
+                ? Icons.alt_route_rounded
+                : Icons.navigation_rounded,
             size: 14.sp,
             color: color,
           ),
@@ -1348,15 +1593,14 @@ class _RouteSummaryStrip extends StatelessWidget {
     }
 
     final hasLabels =
-        (etaLabel ?? '').trim().isNotEmpty || (distanceLabel ?? '').trim().isNotEmpty;
+        (etaLabel ?? '').trim().isNotEmpty ||
+        (distanceLabel ?? '').trim().isNotEmpty;
 
     if (!hasLabels && !isLiveRoute) {
       return const SizedBox.shrink();
     }
 
-    final label = isLiveRoute
-        ? 'Live route'
-        : 'Approximate route';
+    final label = isLiveRoute ? 'Live route' : 'Approximate route';
 
     return Container(
       width: double.infinity,
@@ -1370,7 +1614,9 @@ class _RouteSummaryStrip extends StatelessWidget {
           Icon(
             isLiveRoute ? Icons.navigation_rounded : Icons.alt_route_rounded,
             size: 16.sp,
-            color: isLiveRoute ? AppColors.primaryColor : AppColors.warningColor,
+            color: isLiveRoute
+                ? AppColors.primaryColor
+                : AppColors.warningColor,
           ),
           SizedBox(width: 8.w),
           Text(

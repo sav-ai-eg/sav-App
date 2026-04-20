@@ -38,8 +38,17 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       _prefs.remove(AppConstants.prefRefreshToken),
       _prefs.remove(AppConstants.prefDriverId),
       _prefs.remove(AppConstants.prefDriverName),
+      _prefs.remove(AppConstants.prefDriverPhone),
+      _prefs.remove(AppConstants.prefDriverLicenseNumber),
+      _prefs.remove(AppConstants.prefDriverVehiclePlate),
+      _prefs.remove(AppConstants.prefDriverCompanyName),
+      _prefs.remove(AppConstants.prefDriverEmergencyContact),
       _prefs.remove(AppConstants.prefDriverUsername),
       _prefs.remove(AppConstants.prefDriverRole),
+      _prefs.remove(AppConstants.prefAlertSoundEnabled),
+      _prefs.remove(AppConstants.prefVibrationEnabled),
+      _prefs.remove(AppConstants.prefDetectionInterval),
+      _prefs.remove(AppConstants.prefNotificationsEnabled),
     ];
 
     final result = await Future.wait<bool>(operations);

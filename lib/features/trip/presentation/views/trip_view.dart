@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,35 @@ class TripView extends StatefulWidget {
 }
 
 class _TripViewState extends State<TripView> with WidgetsBindingObserver {
+  bool _handleStandardScroll(UserScrollNotification notification) {
+    if (!mounted || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    if (notification.metrics.maxScrollExtent <= 0) {
+      context.read<BottomNavCubit>().setHideNavBar(false);
+      return false;
+    }
+
+    final navCubit = context.read<BottomNavCubit>();
+
+    switch (notification.direction) {
+      case ScrollDirection.reverse:
+        navCubit.setHideNavBar(true);
+        break;
+      case ScrollDirection.forward:
+        navCubit.setHideNavBar(false);
+        break;
+      case ScrollDirection.idle:
+        if (notification.metrics.pixels <= 0) {
+          navCubit.setHideNavBar(false);
+        }
+        break;
+    }
+
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -110,7 +140,10 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
                         Expanded(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: 16.w),
-                            child: _buildStandardContent(context, state),
+                            child: NotificationListener<UserScrollNotification>(
+                              onNotification: _handleStandardScroll,
+                              child: _buildStandardContent(context, state),
+                            ),
                           ),
                         ),
                       ],
@@ -131,8 +164,9 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
       return ActiveTripWidget(state: state.activeState, isEnding: true);
     }
 
-    final activeState =
-        state is TripActive ? state : context.read<TripCubit>().activeSnapshot;
+    final activeState = state is TripActive
+        ? state
+        : context.read<TripCubit>().activeSnapshot;
 
     if (activeState != null) {
       return ActiveTripWidget(state: activeState);
