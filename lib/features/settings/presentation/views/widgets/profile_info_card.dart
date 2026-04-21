@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
 
 class ProfileInfoCard extends StatelessWidget {
@@ -105,23 +107,37 @@ class _ProfileImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final source = avatarUrl?.trim() ?? '';
+    final source = _normalizeAvatarUrl(avatarUrl);
 
     if (source.isEmpty) {
       return _fallback();
     }
 
-    return Image.network(
-      source,
+    return CachedNetworkImage(
+      imageUrl: source,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _fallback(),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
-        return _fallback(isLoading: true);
-      },
+      cacheKey: source,
+      errorWidget: (_, __, ___) => _fallback(),
+      placeholder: (_, __) => _fallback(isLoading: true),
     );
+  }
+
+  String _normalizeAvatarUrl(String? value) {
+    final raw = value?.trim() ?? '';
+    if (raw.isEmpty) {
+      return '';
+    }
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return '${AppConstants.apiBaseUrl}$raw';
+    }
+
+    return '${AppConstants.apiBaseUrl}/$raw';
   }
 
   Widget _fallback({bool isLoading = false}) {

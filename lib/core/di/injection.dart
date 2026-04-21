@@ -31,13 +31,10 @@ import 'package:sav/features/home/domain/repositories/home_repository.dart';
 import 'package:sav/features/home/domain/usecases/load_home_dashboard_use_case.dart';
 import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_case.dart';
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
-
 final getIt = GetIt.instance;
-
 @InjectableInit()
 Future<void> configureDependencies() async {
   await getIt.init();
-
   if (!getIt.isRegistered<Dio>()) {
     getIt.registerLazySingleton<Dio>(
       () => Dio(
@@ -54,13 +51,11 @@ Future<void> configureDependencies() async {
       ),
     );
   }
-
   if (!getIt.isRegistered<ApiConsumer>()) {
     getIt.registerLazySingleton<ApiConsumer>(
       () => DioApiConsumer(getIt<Dio>(), getIt<SharedPreferences>()),
     );
   }
-
   if (!getIt.isRegistered<AuthRemoteDataSource>()) {
     getIt.registerLazySingleton<AuthRemoteDataSource>(
       () => AuthRemoteDataSourceImpl(getIt<ApiConsumer>()),
@@ -72,7 +67,6 @@ Future<void> configureDependencies() async {
       () => AuthLocalDataSourceImpl(getIt<SharedPreferences>()),
     );
   }
-
   if (!getIt.isRegistered<AuthRepository>()) {
     getIt.registerLazySingleton<AuthRepository>(
       () => AuthRepositoryImpl(
@@ -87,13 +81,11 @@ Future<void> configureDependencies() async {
       () => LoginUseCase(getIt<AuthRepository>()),
     );
   }
-
   if (!getIt.isRegistered<PersistAuthSessionUseCase>()) {
     getIt.registerLazySingleton<PersistAuthSessionUseCase>(
       () => PersistAuthSessionUseCase(getIt<AuthRepository>()),
     );
   }
-
   if (!getIt.isRegistered<LogoutUseCase>()) {
     getIt.registerLazySingleton<LogoutUseCase>(
       () => LogoutUseCase(getIt<AuthRepository>()),
@@ -112,13 +104,11 @@ Future<void> configureDependencies() async {
       () => GooglePlacesService(dio: getIt<Dio>()),
     );
   }
-
   if (!getIt.isRegistered<GoogleDirectionsService>()) {
     getIt.registerLazySingleton<GoogleDirectionsService>(
       () => GoogleDirectionsService(dio: getIt<Dio>()),
     );
   }
-
   if (!getIt.isRegistered<TripNavigationService>()) {
     getIt.registerLazySingleton<TripNavigationService>(
       () => TripNavigationService(getIt<GoogleDirectionsService>()),
@@ -136,7 +126,6 @@ Future<void> configureDependencies() async {
       () => BackendApiService(apiConsumer: getIt<ApiConsumer>()),
     );
   }
-
   if (!getIt.isRegistered<HomeRemoteDataSource>()) {
     getIt.registerLazySingleton<HomeRemoteDataSource>(
       () => HomeRemoteDataSourceImpl(getIt<ApiConsumer>()),
@@ -148,7 +137,6 @@ Future<void> configureDependencies() async {
       () => HomeLocalDataSourceImpl(getIt<SharedPreferences>()),
     );
   }
-
   if (!getIt.isRegistered<HomeRepository>()) {
     getIt.registerLazySingleton<HomeRepository>(
       () => HomeRepositoryImpl(
@@ -159,13 +147,11 @@ Future<void> configureDependencies() async {
       ),
     );
   }
-
   if (!getIt.isRegistered<LoadHomeDashboardUseCase>()) {
     getIt.registerLazySingleton<LoadHomeDashboardUseCase>(
       () => LoadHomeDashboardUseCase(getIt<HomeRepository>()),
     );
   }
-
   if (!getIt.isRegistered<LoadHomeDutyForMonthUseCase>()) {
     getIt.registerLazySingleton<LoadHomeDutyForMonthUseCase>(
       () => LoadHomeDutyForMonthUseCase(getIt<HomeRepository>()),

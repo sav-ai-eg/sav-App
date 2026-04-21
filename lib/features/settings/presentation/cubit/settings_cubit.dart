@@ -176,8 +176,18 @@ class SettingsCubit extends Cubit<SettingsState> {
         doc.id,
       );
 
-      await _cacheDriverProfile(driver);
-      return driver;
+      final cachedAvatar =
+          _prefs.getString(AppConstants.prefDriverAvatarUrl)?.trim() ?? '';
+      final profileAvatar = driver.avatarUrl?.trim() ?? '';
+
+      final mergedDriver = profileAvatar.isNotEmpty
+          ? driver
+          : driver.copyWith(
+              avatarUrl: cachedAvatar.isEmpty ? null : cachedAvatar,
+            );
+
+      await _cacheDriverProfile(mergedDriver);
+      return mergedDriver;
     } catch (_) {
       return _localFallbackDriver(driverId);
     }

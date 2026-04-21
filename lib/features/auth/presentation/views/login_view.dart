@@ -58,16 +58,6 @@ class _LoginViewState extends State<LoginView> {
               _submitErrorMessage = state.message;
             });
           }
-
-          final messenger = ScaffoldMessenger.of(context);
-          messenger.hideCurrentSnackBar();
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: AppColors.errorColor,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
         }
       },
       builder: (context, state) {
