@@ -51,6 +51,10 @@ class AppConstants {
   static const String prefHomeDashboardCache = 'homeDashboardCache';
   static const String prefHomeDashboardCacheAt = 'homeDashboardCacheAt';
 
+  // SecureStorage Keys
+  static const String secureAccessToken = 'savAccessToken';
+  static const String secureRefreshToken = 'savRefreshToken';
+
   static const String _apiBaseUrlFromDefine = String.fromEnvironment(
     'SAV_API_BASE_URL',
   );

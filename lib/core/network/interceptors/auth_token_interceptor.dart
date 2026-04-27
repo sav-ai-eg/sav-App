@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/util/routing/routes.dart';
 import 'package:sav/sav_app.dart';
 import 'package:sav/core/constants/api_endpoints.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 
 class AuthRequestOptionsKeys {
   static const String requiresAuth = 'requiresAuth';
@@ -17,27 +17,38 @@ class AuthTokenInterceptor extends QueuedInterceptor {
     required Dio requestDio,
     required Dio refreshDio,
     required SharedPreferences prefs,
-  })  : _requestDio = requestDio,
-        _refreshDio = refreshDio,
-        _prefs = prefs;
+    AuthSessionStorage? authSessionStorage,
+  }) : _requestDio = requestDio,
+       _refreshDio = refreshDio,
+       _authSessionStorage =
+           authSessionStorage ?? AuthSessionStorage(preferences: prefs);
 
   final Dio _requestDio;
   final Dio _refreshDio;
-  final SharedPreferences _prefs;
+  final AuthSessionStorage _authSessionStorage;
 
   Future<String?>? _refreshFuture;
 
   @override
-  void onRequest(
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    _attachAccessToken(options, handler);
+  }
+
+  Future<void> _attachAccessToken(
     RequestOptions options,
     RequestInterceptorHandler handler,
-  ) {
-    final requiresAuth = options.extra[AuthRequestOptionsKeys.requiresAuth] != false;
+  ) async {
+    final requiresAuth =
+        options.extra[AuthRequestOptionsKeys.requiresAuth] != false;
 
     if (requiresAuth && !_hasAuthorizationHeader(options.headers)) {
-      final accessToken = _prefs.getString(AppConstants.prefAccessToken)?.trim() ?? '';
-      if (accessToken.isNotEmpty) {
-        options.headers['Authorization'] = 'Bearer $accessToken';
+      try {
+        final accessToken = await _authSessionStorage.getAccessToken();
+        if (accessToken.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $accessToken';
+        }
+      } catch (_) {
+        // Continue without an auth header and let the backend reject the call.
       }
     }
 
@@ -58,7 +69,8 @@ class AuthTokenInterceptor extends QueuedInterceptor {
     final requestOptions = response.requestOptions;
     final requiresAuth =
         requestOptions.extra[AuthRequestOptionsKeys.requiresAuth] != false;
-    final hasRetried = requestOptions.extra[AuthRequestOptionsKeys.hasRetried] == true;
+    final hasRetried =
+        requestOptions.extra[AuthRequestOptionsKeys.hasRetried] == true;
 
     if (!requiresAuth || hasRetried || _isRefreshRequest(requestOptions.path)) {
       handler.next(response);
@@ -105,7 +117,7 @@ class AuthTokenInterceptor extends QueuedInterceptor {
     _refreshFuture = completer.future;
 
     try {
-      final refreshToken = _prefs.getString(AppConstants.prefRefreshToken)?.trim() ?? '';
+      final refreshToken = await _authSessionStorage.getRefreshToken();
       if (refreshToken.isEmpty) {
         completer.complete(null);
         return completer.future;
@@ -119,9 +131,7 @@ class AuthTokenInterceptor extends QueuedInterceptor {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          extra: <String, dynamic>{
-            AuthRequestOptionsKeys.requiresAuth: false,
-          },
+          extra: <String, dynamic>{AuthRequestOptionsKeys.requiresAuth: false},
         ),
       );
 
@@ -139,12 +149,11 @@ class AuthTokenInterceptor extends QueuedInterceptor {
         return completer.future;
       }
 
-      await _prefs.setString(AppConstants.prefAccessToken, newAccessToken);
-
       final newRefreshToken = (data['refresh'] ?? '').toString().trim();
-      if (newRefreshToken.isNotEmpty) {
-        await _prefs.setString(AppConstants.prefRefreshToken, newRefreshToken);
-      }
+      await _authSessionStorage.saveRefreshedTokens(
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      );
 
       completer.complete(newAccessToken);
       return completer.future;
@@ -169,24 +178,7 @@ class AuthTokenInterceptor extends QueuedInterceptor {
   }
 
   Future<void> _clearAuthSession() async {
-    await Future.wait(<Future<bool>>[
-      _prefs.remove(AppConstants.prefAccessToken),
-      _prefs.remove(AppConstants.prefRefreshToken),
-      _prefs.remove(AppConstants.prefDriverId),
-      _prefs.remove(AppConstants.prefDriverName),
-      _prefs.remove(AppConstants.prefDriverPhone),
-      _prefs.remove(AppConstants.prefDriverLicenseNumber),
-      _prefs.remove(AppConstants.prefDriverVehiclePlate),
-      _prefs.remove(AppConstants.prefDriverCompanyName),
-      _prefs.remove(AppConstants.prefDriverEmergencyContact),
-      _prefs.remove(AppConstants.prefDriverAvatarUrl),
-      _prefs.remove(AppConstants.prefDriverUsername),
-      _prefs.remove(AppConstants.prefDriverRole),
-      _prefs.remove(AppConstants.prefAlertSoundEnabled),
-      _prefs.remove(AppConstants.prefVibrationEnabled),
-      _prefs.remove(AppConstants.prefDetectionInterval),
-      _prefs.remove(AppConstants.prefNotificationsEnabled),
-    ]);
+    await _authSessionStorage.clearSession();
 
     final navigator = SavApp.appNavigatorKey.currentState;
     if (navigator == null || !navigator.mounted) {

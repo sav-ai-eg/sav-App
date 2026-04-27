@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/di/injection.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 import 'package:sav/core/services/permission_service.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/core/util/extensions/navigation.dart';
@@ -33,6 +34,7 @@ class SettingsView extends StatelessWidget {
         getIt<FirestoreService>(),
         getIt<SharedPreferences>(),
         getIt<LogoutUseCase>(),
+        getIt<AuthSessionStorage>(),
       )..loadDriverData(),
       child: const _SettingsBody(),
     );
@@ -47,7 +49,14 @@ class _SettingsBody extends StatefulWidget {
 }
 
 class _SettingsBodyState extends State<_SettingsBody> {
-  static const List<int> _detectionIntervals = <int>[500, 750, 1000, 1250, 1500, 2000];
+  static const List<int> _detectionIntervals = <int>[
+    500,
+    750,
+    1000,
+    1250,
+    1500,
+    2000,
+  ];
 
   @override
   void initState() {
@@ -169,10 +178,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
           ),
         ),
         SizedBox(height: 14.h),
-        _SessionHeaderCard(
-          username: state.username,
-          role: normalizedRole,
-        ),
+        _SessionHeaderCard(username: state.username, role: normalizedRole),
         SizedBox(height: 16.h),
 
         SettingsSectionHeader(
@@ -209,20 +215,17 @@ class _SettingsBodyState extends State<_SettingsBody> {
           vibrationEnabled: state.vibrationEnabled,
           notificationsEnabled: state.notificationsEnabled,
           detectionIntervalMs: state.detectionIntervalMs,
-          onAlertSoundChanged:
-              (value) => context.read<SettingsCubit>().setAlertSoundEnabled(value),
-          onVibrationChanged:
-              (value) => context.read<SettingsCubit>().setVibrationEnabled(value),
-          onNotificationsChanged:
-              (value) => context.read<SettingsCubit>().setNotificationsEnabled(value),
+          onAlertSoundChanged: (value) =>
+              context.read<SettingsCubit>().setAlertSoundEnabled(value),
+          onVibrationChanged: (value) =>
+              context.read<SettingsCubit>().setVibrationEnabled(value),
+          onNotificationsChanged: (value) =>
+              context.read<SettingsCubit>().setNotificationsEnabled(value),
           onEditInterval: () => _showTripSettingsSheet(state),
         ),
         SizedBox(height: 16.h),
 
-        SettingsSectionHeader(
-          title: 'Settings',
-          fontWeight: FontWeight.w500,
-        ),
+        SettingsSectionHeader(title: 'Settings', fontWeight: FontWeight.w500),
         SizedBox(height: 8.h),
         SettingsListCard(
           items: [
@@ -239,9 +242,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                   ? 'Notifications (Enabled)'
                   : 'Notifications (Disabled)',
               onTap: () async {
-                await context
-                    .read<SettingsCubit>()
-                    .setNotificationsEnabled(!state.notificationsEnabled);
+                await context.read<SettingsCubit>().setNotificationsEnabled(
+                  !state.notificationsEnabled,
+                );
                 if (!mounted) {
                   return;
                 }
@@ -355,8 +358,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                         ),
                         selected: isSelected,
                         selectedColor: AppColors.primaryColor,
-                        backgroundColor:
-                            AppColors.primaryColor.withValues(alpha: 0.08),
+                        backgroundColor: AppColors.primaryColor.withValues(
+                          alpha: 0.08,
+                        ),
                         side: BorderSide(
                           color: AppColors.primaryColor.withValues(alpha: 0.25),
                         ),
@@ -459,8 +463,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     title: const Text('Alert Sound'),
                     subtitle: const Text('Play warning sounds for detections'),
                     activeThumbColor: AppColors.primaryColor,
-                    activeTrackColor:
-                      AppColors.primaryColor.withValues(alpha: 0.4),
+                    activeTrackColor: AppColors.primaryColor.withValues(
+                      alpha: 0.4,
+                    ),
                     onChanged: (value) =>
                         settingsCubit.setAlertSoundEnabled(value),
                   ),
@@ -470,8 +475,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     title: const Text('Vibration'),
                     subtitle: const Text('Vibrate while showing warnings'),
                     activeThumbColor: AppColors.primaryColor,
-                    activeTrackColor:
-                      AppColors.primaryColor.withValues(alpha: 0.4),
+                    activeTrackColor: AppColors.primaryColor.withValues(
+                      alpha: 0.4,
+                    ),
                     onChanged: (value) =>
                         settingsCubit.setVibrationEnabled(value),
                   ),
@@ -481,8 +487,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     title: const Text('Push Notifications'),
                     subtitle: const Text('Receive app and trip notifications'),
                     activeThumbColor: AppColors.primaryColor,
-                    activeTrackColor:
-                      AppColors.primaryColor.withValues(alpha: 0.4),
+                    activeTrackColor: AppColors.primaryColor.withValues(
+                      alpha: 0.4,
+                    ),
                     onChanged: (value) =>
                         settingsCubit.setNotificationsEnabled(value),
                   ),
@@ -543,7 +550,9 @@ class _SettingsBodyState extends State<_SettingsBody> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () async {
-                        await context.read<SettingsCubit>().refreshPermissionStatus();
+                        await context
+                            .read<SettingsCubit>()
+                            .refreshPermissionStatus();
                         if (!mounted) {
                           return;
                         }
@@ -688,7 +697,8 @@ class _SettingsBodyState extends State<_SettingsBody> {
     final shouldLogout = await SavDialog.confirm(
       context,
       title: 'Sign Out',
-      message: 'Are you sure you want to sign out? All local data will be cleared.',
+      message:
+          'Are you sure you want to sign out? All local data will be cleared.',
       confirmText: 'Sign Out',
       icon: Icons.logout_rounded,
       confirmColor: AppColors.errorColor,
@@ -711,17 +721,13 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
     context.pushAndRemoveUntilWithNamed(Routes.loginView);
   }
-
 }
 
 class _SettingsErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _SettingsErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _SettingsErrorState({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -765,10 +771,7 @@ class _SessionHeaderCard extends StatelessWidget {
   final String username;
   final String role;
 
-  const _SessionHeaderCard({
-    required this.username,
-    required this.role,
-  });
+  const _SessionHeaderCard({required this.username, required this.role});
 
   @override
   Widget build(BuildContext context) {
@@ -810,7 +813,9 @@ class _SessionHeaderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  normalizedUsername.isEmpty ? 'Driver Account' : normalizedUsername,
+                  normalizedUsername.isEmpty
+                      ? 'Driver Account'
+                      : normalizedUsername,
                   style: GoogleFonts.inter(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w600,
@@ -864,16 +869,10 @@ class _ExtendedProfileCard extends StatelessWidget {
       child: Column(
         children: [
           if (company.isNotEmpty)
-            _CompactInfoRow(
-              label: 'Company',
-              value: company,
-            ),
+            _CompactInfoRow(label: 'Company', value: company),
           if (company.isNotEmpty && emergency.isNotEmpty) SizedBox(height: 8.h),
           if (emergency.isNotEmpty)
-            _CompactInfoRow(
-              label: 'Emergency Contact',
-              value: emergency,
-            ),
+            _CompactInfoRow(label: 'Emergency Contact', value: emergency),
         ],
       ),
     );
@@ -884,10 +883,7 @@ class _CompactInfoRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _CompactInfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _CompactInfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -965,7 +961,10 @@ class _PreferencesCard extends StatelessWidget {
             activeTrackColor: AppColors.primaryColor.withValues(alpha: 0.4),
             title: Text(
               'Alert Sound',
-              style: GoogleFonts.inter(fontSize: 14.sp, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             onChanged: onAlertSoundChanged,
           ),
@@ -977,7 +976,10 @@ class _PreferencesCard extends StatelessWidget {
             activeTrackColor: AppColors.primaryColor.withValues(alpha: 0.4),
             title: Text(
               'Vibration',
-              style: GoogleFonts.inter(fontSize: 14.sp, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             onChanged: onVibrationChanged,
           ),
@@ -989,7 +991,10 @@ class _PreferencesCard extends StatelessWidget {
             activeTrackColor: AppColors.primaryColor.withValues(alpha: 0.4),
             title: Text(
               'Notifications',
-              style: GoogleFonts.inter(fontSize: 14.sp, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             onChanged: onNotificationsChanged,
           ),
@@ -1121,4 +1126,3 @@ class _SupportActionTile extends StatelessWidget {
     );
   }
 }
-

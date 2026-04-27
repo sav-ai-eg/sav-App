@@ -1,19 +1,29 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/errors/exceptions.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source.dart';
 import 'package:sav/features/auth/domain/entities/auth_session_entity.dart';
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
-  AuthLocalDataSourceImpl(this._prefs);
+  AuthLocalDataSourceImpl(
+    SharedPreferences preferences, {
+    AuthSessionStorage? sessionStorage,
+  }) : _prefs = preferences,
+       _sessionStorage =
+           sessionStorage ?? AuthSessionStorage(preferences: preferences);
 
   final SharedPreferences _prefs;
+  final AuthSessionStorage _sessionStorage;
 
   @override
   Future<void> saveSession({required AuthSessionEntity session}) async {
+    await _sessionStorage.saveTokens(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    );
+
     final operations = <Future<bool>>[
-      _prefs.setString(AppConstants.prefAccessToken, session.accessToken),
-      _prefs.setString(AppConstants.prefRefreshToken, session.refreshToken),
       _prefs.setString(AppConstants.prefDriverId, session.user.id.toString()),
       _prefs.setString(AppConstants.prefDriverName, session.user.displayName),
       _prefs.setString(AppConstants.prefDriverPhone, session.user.phoneNumber),
@@ -25,7 +35,10 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
         AppConstants.prefDriverEmergencyContact,
         session.user.emergencyContactPhone,
       ),
-      _prefs.setString(AppConstants.prefDriverAvatarUrl, session.user.avatarUrl),
+      _prefs.setString(
+        AppConstants.prefDriverAvatarUrl,
+        session.user.avatarUrl,
+      ),
       _prefs.setString(AppConstants.prefDriverUsername, session.user.username),
       _prefs.setString(AppConstants.prefDriverRole, session.user.role),
     ];
@@ -37,33 +50,15 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   }
 
   @override
-  String getRefreshToken() {
-    return _prefs.getString(AppConstants.prefRefreshToken)?.trim() ?? '';
+  Future<String> getRefreshToken() {
+    return _sessionStorage.getRefreshToken();
   }
 
   @override
   Future<void> clearSession() async {
-    final operations = <Future<bool>>[
-      _prefs.remove(AppConstants.prefAccessToken),
-      _prefs.remove(AppConstants.prefRefreshToken),
-      _prefs.remove(AppConstants.prefDriverId),
-      _prefs.remove(AppConstants.prefDriverName),
-      _prefs.remove(AppConstants.prefDriverPhone),
-      _prefs.remove(AppConstants.prefDriverLicenseNumber),
-      _prefs.remove(AppConstants.prefDriverVehiclePlate),
-      _prefs.remove(AppConstants.prefDriverCompanyName),
-      _prefs.remove(AppConstants.prefDriverEmergencyContact),
-      _prefs.remove(AppConstants.prefDriverAvatarUrl),
-      _prefs.remove(AppConstants.prefDriverUsername),
-      _prefs.remove(AppConstants.prefDriverRole),
-      _prefs.remove(AppConstants.prefAlertSoundEnabled),
-      _prefs.remove(AppConstants.prefVibrationEnabled),
-      _prefs.remove(AppConstants.prefDetectionInterval),
-      _prefs.remove(AppConstants.prefNotificationsEnabled),
-    ];
-
-    final result = await Future.wait<bool>(operations);
-    if (result.any((bool success) => !success)) {
+    try {
+      await _sessionStorage.clearSession();
+    } catch (_) {
       throw const CacheException('Unable to clear auth session locally.');
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
 import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
@@ -11,9 +12,14 @@ class SettingsCubit extends Cubit<SettingsState> {
   final FirestoreService _firestoreService;
   final SharedPreferences _prefs;
   final LogoutUseCase _logoutUseCase;
+  final AuthSessionStorage _authSessionStorage;
 
-  SettingsCubit(this._firestoreService, this._prefs, this._logoutUseCase)
-      : super(const SettingsInitial());
+  SettingsCubit(
+    this._firestoreService,
+    this._prefs,
+    this._logoutUseCase,
+    this._authSessionStorage,
+  ) : super(const SettingsInitial());
 
   Future<void> loadDriverData() async {
     emit(const SettingsLoading());
@@ -27,6 +33,7 @@ class SettingsCubit extends Cubit<SettingsState> {
 
       final permissions = await _resolvePermissionStatus();
       final driver = await _resolveDriver(driverId);
+      final hasValidSession = await _hasValidSession(driverId);
 
       emit(
         SettingsLoaded(
@@ -43,12 +50,13 @@ class SettingsCubit extends Cubit<SettingsState> {
           username:
               _prefs.getString(AppConstants.prefDriverUsername)?.trim() ?? '',
           role: _prefs.getString(AppConstants.prefDriverRole)?.trim() ?? '',
-          hasValidSession: _hasValidSession(driverId),
+          hasValidSession: hasValidSession,
         ),
       );
     } catch (_) {
       final driverId = _resolveDriverId() ?? '';
       final permissions = await _resolvePermissionStatus();
+      final hasValidSession = await _hasValidSession(driverId);
       emit(
         SettingsLoaded(
           driver: _localFallbackDriver(driverId),
@@ -64,7 +72,7 @@ class SettingsCubit extends Cubit<SettingsState> {
           username:
               _prefs.getString(AppConstants.prefDriverUsername)?.trim() ?? '',
           role: _prefs.getString(AppConstants.prefDriverRole)?.trim() ?? '',
-          hasValidSession: _hasValidSession(driverId),
+          hasValidSession: hasValidSession,
         ),
       );
     }
@@ -154,14 +162,12 @@ class SettingsCubit extends Cubit<SettingsState> {
     return driverId;
   }
 
-  bool _hasValidSession(String driverId) {
+  Future<bool> _hasValidSession(String driverId) {
     if (driverId.trim().isEmpty) {
-      return false;
+      return Future<bool>.value(false);
     }
 
-    final accessToken =
-        _prefs.getString(AppConstants.prefAccessToken)?.trim() ?? '';
-    return accessToken.isNotEmpty;
+    return _authSessionStorage.hasValidSession();
   }
 
   Future<DriverModel> _resolveDriver(String driverId) async {
@@ -200,24 +206,25 @@ class SettingsCubit extends Cubit<SettingsState> {
       phone: _prefs.getString(AppConstants.prefDriverPhone) ?? '',
       licenseNumber:
           _prefs.getString(AppConstants.prefDriverLicenseNumber) ?? '',
-      vehiclePlate:
-          _prefs.getString(AppConstants.prefDriverVehiclePlate) ?? '',
-      companyName: (_prefs.getString(AppConstants.prefDriverCompanyName) ?? '')
+      vehiclePlate: _prefs.getString(AppConstants.prefDriverVehiclePlate) ?? '',
+      companyName:
+          (_prefs.getString(AppConstants.prefDriverCompanyName) ?? '')
               .trim()
               .isEmpty
           ? null
           : _prefs.getString(AppConstants.prefDriverCompanyName),
       emergencyContact:
           (_prefs.getString(AppConstants.prefDriverEmergencyContact) ?? '')
-                  .trim()
-                  .isEmpty
-              ? null
-              : _prefs.getString(AppConstants.prefDriverEmergencyContact),
-      avatarUrl: (_prefs.getString(AppConstants.prefDriverAvatarUrl) ?? '')
-          .trim()
-          .isEmpty
-        ? null
-        : _prefs.getString(AppConstants.prefDriverAvatarUrl),
+              .trim()
+              .isEmpty
+          ? null
+          : _prefs.getString(AppConstants.prefDriverEmergencyContact),
+      avatarUrl:
+          (_prefs.getString(AppConstants.prefDriverAvatarUrl) ?? '')
+              .trim()
+              .isEmpty
+          ? null
+          : _prefs.getString(AppConstants.prefDriverAvatarUrl),
       createdAt: DateTime.now(),
     );
   }
@@ -255,14 +262,11 @@ class SettingsCubit extends Cubit<SettingsState> {
     final locationGranted =
         locationStatus.isGranted || locationStatus.isLimited;
 
-    return (
-      cameraGranted: cameraGranted,
-      locationGranted: locationGranted,
-    );
+    return (cameraGranted: cameraGranted, locationGranted: locationGranted);
   }
 
   Future<({bool cameraGranted, bool locationGranted})>
-      _resolvePermissionStatus() async {
+  _resolvePermissionStatus() async {
     try {
       final cameraStatus = await Permission.camera.status;
       final locationStatus = await Permission.locationWhenInUse.status;
@@ -278,7 +282,9 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   int _resolveDetectionIntervalMs() {
     final saved = _prefs.getInt(AppConstants.prefDetectionInterval);
-    return _normalizeDetectionIntervalMs(saved ?? AppConstants.detectionIntervalMs);
+    return _normalizeDetectionIntervalMs(
+      saved ?? AppConstants.detectionIntervalMs,
+    );
   }
 
   int _normalizeDetectionIntervalMs(int value) {

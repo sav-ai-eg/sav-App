@@ -69,7 +69,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, Unit>> logout() async {
-    final refreshToken = _localDataSource.getRefreshToken();
+    final refreshToken = await _localDataSource.getRefreshToken();
 
     try {
       if (refreshToken.isNotEmpty) {

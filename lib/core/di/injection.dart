@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/dio_api_consumer.dart';
 import 'package:sav/core/services/backend_api_service.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
@@ -22,6 +24,7 @@ import 'package:sav/features/auth/domain/usecases/login_use_case.dart';
 import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
 import 'package:sav/features/auth/domain/usecases/persist_auth_session_use_case.dart';
 import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
+import 'package:sav/features/splash/presentation/cubit/splash_cubit.dart';
 import 'package:sav/features/home/data/datasources/home_local_data_source.dart';
 import 'package:sav/features/home/data/datasources/home_local_data_source_impl.dart';
 import 'package:sav/features/home/data/datasources/home_remote_data_source.dart';
@@ -31,10 +34,24 @@ import 'package:sav/features/home/domain/repositories/home_repository.dart';
 import 'package:sav/features/home/domain/usecases/load_home_dashboard_use_case.dart';
 import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_case.dart';
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
+
 final getIt = GetIt.instance;
 @InjectableInit()
 Future<void> configureDependencies() async {
   await getIt.init();
+  if (!getIt.isRegistered<FlutterSecureStorage>()) {
+    getIt.registerLazySingleton<FlutterSecureStorage>(
+      () => const FlutterSecureStorage(),
+    );
+  }
+  if (!getIt.isRegistered<AuthSessionStorage>()) {
+    getIt.registerLazySingleton<AuthSessionStorage>(
+      () => AuthSessionStorage(
+        preferences: getIt<SharedPreferences>(),
+        secureStorage: getIt<FlutterSecureStorage>(),
+      ),
+    );
+  }
   if (!getIt.isRegistered<Dio>()) {
     getIt.registerLazySingleton<Dio>(
       () => Dio(
@@ -51,11 +68,16 @@ Future<void> configureDependencies() async {
       ),
     );
   }
-  if (!getIt.isRegistered<ApiConsumer>()) {
-    getIt.registerLazySingleton<ApiConsumer>(
-      () => DioApiConsumer(getIt<Dio>(), getIt<SharedPreferences>()),
-    );
+  if (getIt.isRegistered<ApiConsumer>()) {
+    await getIt.unregister<ApiConsumer>();
   }
+  getIt.registerLazySingleton<ApiConsumer>(
+    () => DioApiConsumer(
+      getIt<Dio>(),
+      getIt<SharedPreferences>(),
+      getIt<AuthSessionStorage>(),
+    ),
+  );
   if (!getIt.isRegistered<AuthRemoteDataSource>()) {
     getIt.registerLazySingleton<AuthRemoteDataSource>(
       () => AuthRemoteDataSourceImpl(getIt<ApiConsumer>()),
@@ -64,7 +86,10 @@ Future<void> configureDependencies() async {
 
   if (!getIt.isRegistered<AuthLocalDataSource>()) {
     getIt.registerLazySingleton<AuthLocalDataSource>(
-      () => AuthLocalDataSourceImpl(getIt<SharedPreferences>()),
+      () => AuthLocalDataSourceImpl(
+        getIt<SharedPreferences>(),
+        sessionStorage: getIt<AuthSessionStorage>(),
+      ),
     );
   }
   if (!getIt.isRegistered<AuthRepository>()) {
@@ -98,6 +123,12 @@ Future<void> configureDependencies() async {
           LoginCubit(getIt<LoginUseCase>(), getIt<PersistAuthSessionUseCase>()),
     );
   }
+  if (getIt.isRegistered<SplashCubit>()) {
+    await getIt.unregister<SplashCubit>();
+  }
+  getIt.registerFactory<SplashCubit>(
+    () => SplashCubit(getIt<SharedPreferences>(), getIt<AuthSessionStorage>()),
+  );
 
   if (!getIt.isRegistered<GooglePlacesService>()) {
     getIt.registerLazySingleton<GooglePlacesService>(

@@ -8,10 +8,17 @@ import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/core/network/api_response.dart';
 import 'package:sav/core/network/interceptors/auth_token_interceptor.dart';
+import 'package:sav/core/services/auth_session_storage.dart';
 
 @LazySingleton(as: ApiConsumer)
 class DioApiConsumer implements ApiConsumer {
-  DioApiConsumer(this._dio, this._prefs) {
+  DioApiConsumer(
+    Dio dio,
+    SharedPreferences prefs, [
+    AuthSessionStorage? authSessionStorage,
+  ]) : _dio = dio,
+       _authSessionStorage =
+           authSessionStorage ?? AuthSessionStorage(preferences: prefs) {
     _dio.options = _dio.options.copyWith(
       baseUrl: AppConstants.apiBaseUrl,
       connectTimeout: const Duration(seconds: 20),
@@ -35,7 +42,8 @@ class DioApiConsumer implements ApiConsumer {
         AuthTokenInterceptor(
           requestDio: _dio,
           refreshDio: _refreshDio,
-          prefs: _prefs,
+          prefs: prefs,
+          authSessionStorage: _authSessionStorage,
         ),
       );
     }
@@ -43,7 +51,7 @@ class DioApiConsumer implements ApiConsumer {
 
   final Dio _dio;
   final Dio _refreshDio = Dio();
-  final SharedPreferences _prefs;
+  final AuthSessionStorage _authSessionStorage;
 
   static const Map<String, String> _jsonHeaders = <String, String>{
     'Content-Type': 'application/json',
