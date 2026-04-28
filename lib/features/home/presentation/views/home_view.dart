@@ -39,6 +39,10 @@ class _HomeBody extends StatelessWidget {
             currMessage != prevMessage;
       },
       listener: (context, state) {
+        if (!context.mounted) {
+          return;
+        }
+
         if (state is! HomeLoaded || state.infoMessage == null) {
           return;
         }

@@ -52,4 +52,16 @@ class ApiEndpoints {
   // Reports
   static const String reports = '/api/reports/';
   static const String reportsStats = '/api/reports/stats/';
+
+    // Chat
+    static const String chatConversationsBootstrap =
+      '/api/chat/conversations/bootstrap/';
+    static const String chatConversations = '/api/chat/conversations/';
+    static const String chatUnreadSummary = '/api/chat/unread-summary/';
+
+    static String chatConversationMessages(int conversationId) =>
+      '/api/chat/conversations/$conversationId/messages/';
+
+    static String chatConversationMarkRead(int conversationId) =>
+      '/api/chat/conversations/$conversationId/mark-read/';
 }

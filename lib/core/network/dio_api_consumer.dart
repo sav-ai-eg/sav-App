@@ -84,6 +84,33 @@ class DioApiConsumer implements ApiConsumer {
   }
 
   @override
+  Future<ApiResponse> patch(
+    String path, {
+    dynamic body,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    bool requiresAuth = true,
+  }) async {
+    try {
+      final response = await _dio.patch<dynamic>(
+        path,
+        data: body,
+        queryParameters: queryParameters,
+        options: Options(
+          headers: _mergeHeaders(headers),
+          extra: <String, dynamic>{
+            AuthRequestOptionsKeys.requiresAuth: requiresAuth,
+          },
+        ),
+      );
+
+      return _mapResponse(response);
+    } on DioException catch (error) {
+      throw _mapDioError(error);
+    }
+  }
+
+  @override
   Future<ApiResponse> post(
     String path, {
     dynamic body,

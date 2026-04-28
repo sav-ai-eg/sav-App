@@ -1,16 +1,23 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sav/core/constants/app_colors.dart';
-import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/common/chat/data/models/chat_message.dart';
 import 'package:sav/features/common/chat/presentation/widgets/feedback_chat_sheet.dart';
 
 class FeedbackChatScaffold extends StatefulWidget {
   final List<ChatMessage> messages;
+  final ValueChanged<String> onSendText;
+  final bool isLoading;
+  final bool isSending;
 
-  const FeedbackChatScaffold({super.key, required this.messages});
+  const FeedbackChatScaffold({
+    super.key,
+    required this.messages,
+    required this.onSendText,
+    required this.isLoading,
+    required this.isSending,
+  });
 
   @override
   State<FeedbackChatScaffold> createState() => _FeedbackChatScaffoldState();
@@ -22,31 +29,12 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setBottomNavHidden(true);
-    });
   }
 
   @override
   void dispose() {
-    _setBottomNavHidden(false);
     _controller.dispose();
     super.dispose();
-  }
-
-  BottomNavCubit? _tryBottomNavCubit() {
-    try {
-      return context.read<BottomNavCubit>();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void _setBottomNavHidden(bool hidden) {
-    if (!mounted) {
-      return;
-    }
-    _tryBottomNavCubit()?.setHideNavBar(hidden);
   }
 
   void _handleSend() {
@@ -54,6 +42,7 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
     if (text.isEmpty) {
       return;
     }
+    widget.onSendText(text);
     _controller.clear();
   }
 
@@ -85,6 +74,8 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
                 controller: _controller,
                 onSend: _handleSend,
                 onClose: _handleClose,
+                isLoading: widget.isLoading,
+                isSending: widget.isSending,
               ),
             ),
           ),

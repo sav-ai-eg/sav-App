@@ -6,11 +6,13 @@ import 'package:sav/core/constants/app_colors.dart';
 class ChatInputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool enabled;
 
   const ChatInputBar({
     super.key,
     required this.controller,
     required this.onSend,
+    this.enabled = true,
   });
 
   @override
@@ -51,7 +53,7 @@ class ChatInputBar extends StatelessWidget {
           ),
           SizedBox(width: 16.w),
           GestureDetector(
-            onTap: onSend,
+            onTap: enabled ? onSend : null,
             child: Container(
               width: 48.w,
               height: 48.w,
@@ -59,7 +61,11 @@ class ChatInputBar extends StatelessWidget {
                 color: AppColors.primaryColor,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.send_rounded, color: Colors.white, size: 24.sp),
+              child: Icon(
+                Icons.send_rounded,
+                color: Colors.white.withValues(alpha: enabled ? 1 : 0.4),
+                size: 24.sp,
+              ),
             ),
           ),
         ],

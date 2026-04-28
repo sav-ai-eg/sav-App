@@ -6,6 +6,7 @@ import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
 import 'package:sav/features/auth/presentation/views/login_view.dart';
 import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/common/bottom_nav/presentation/views/bottom_nav_view.dart';
+import 'package:sav/features/common/chat/presentation/cubit/feedback_chat_cubit.dart';
 import 'package:sav/features/common/chat/presentation/views/feedback_chat_prompt_view.dart';
 import 'package:sav/features/common/chat/presentation/views/feedback_chat_view.dart';
 import 'package:sav/features/emergency/presentation/views/emergency_view.dart';
@@ -44,11 +45,19 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const EmergencyView());
 
       case Routes.feedbackChatView:
-        return MaterialPageRoute(builder: (_) => const FeedbackChatView());
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => FeedbackChatCubit.full(),
+            child: const FeedbackChatView(),
+          ),
+        );
 
       case Routes.feedbackChatPromptView:
         return MaterialPageRoute(
-          builder: (_) => const FeedbackChatPromptView(),
+          builder: (_) => BlocProvider(
+            create: (_) => FeedbackChatCubit.prompt(),
+            child: const FeedbackChatPromptView(),
+          ),
         );
 
       case Routes.notificationView:

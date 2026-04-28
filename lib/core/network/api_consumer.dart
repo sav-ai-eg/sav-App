@@ -8,6 +8,14 @@ abstract class ApiConsumer {
     bool requiresAuth = true,
   });
 
+  Future<ApiResponse> patch(
+    String path, {
+    dynamic body,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    bool requiresAuth = true,
+  });
+
   Future<ApiResponse> post(
     String path, {
     dynamic body,

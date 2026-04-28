@@ -14,6 +14,15 @@ import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/core/services/trip_navigation_service.dart';
 import 'package:sav/core/di/injection.config.dart';
+import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source.dart';
+import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source_impl.dart';
+import 'package:sav/features/common/chat/data/repositories/chat_repository_impl.dart';
+import 'package:sav/features/common/chat/domain/repositories/chat_repository.dart';
+import 'package:sav/features/common/chat/domain/usecases/bootstrap_chat_conversation_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/load_chat_messages_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/load_chat_unread_summary_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/mark_chat_conversation_read_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/send_chat_message_use_case.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source.dart';
 import 'package:sav/features/auth/data/datasources/auth_local_data_source_impl.dart';
 import 'package:sav/features/auth/data/datasources/auth_remote_data_source.dart';
@@ -155,6 +164,41 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<BackendApiService>()) {
     getIt.registerLazySingleton<BackendApiService>(
       () => BackendApiService(apiConsumer: getIt<ApiConsumer>()),
+    );
+  }
+  if (!getIt.isRegistered<ChatRemoteDataSource>()) {
+    getIt.registerLazySingleton<ChatRemoteDataSource>(
+      () => ChatRemoteDataSourceImpl(getIt<ApiConsumer>()),
+    );
+  }
+  if (!getIt.isRegistered<ChatRepository>()) {
+    getIt.registerLazySingleton<ChatRepository>(
+      () => ChatRepositoryImpl(getIt<ChatRemoteDataSource>()),
+    );
+  }
+  if (!getIt.isRegistered<BootstrapChatConversationUseCase>()) {
+    getIt.registerLazySingleton<BootstrapChatConversationUseCase>(
+      () => BootstrapChatConversationUseCase(getIt<ChatRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadChatMessagesUseCase>()) {
+    getIt.registerLazySingleton<LoadChatMessagesUseCase>(
+      () => LoadChatMessagesUseCase(getIt<ChatRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<SendChatMessageUseCase>()) {
+    getIt.registerLazySingleton<SendChatMessageUseCase>(
+      () => SendChatMessageUseCase(getIt<ChatRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<MarkChatConversationReadUseCase>()) {
+    getIt.registerLazySingleton<MarkChatConversationReadUseCase>(
+      () => MarkChatConversationReadUseCase(getIt<ChatRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadChatUnreadSummaryUseCase>()) {
+    getIt.registerLazySingleton<LoadChatUnreadSummaryUseCase>(
+      () => LoadChatUnreadSummaryUseCase(getIt<ChatRepository>()),
     );
   }
   if (!getIt.isRegistered<HomeRemoteDataSource>()) {

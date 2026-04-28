@@ -36,6 +36,13 @@ class _HistoryBody extends StatefulWidget {
 
 class _HistoryBodyState extends State<_HistoryBody> {
   final ScrollController _scrollController = ScrollController();
+  BottomNavCubit? _bottomNavCubit;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bottomNavCubit = context.read<BottomNavCubit>();
+  }
 
   @override
   void initState() {
@@ -51,8 +58,8 @@ class _HistoryBodyState extends State<_HistoryBody> {
 
   @override
   void dispose() {
-    if (mounted) {
-      context.read<BottomNavCubit>().setHideNavBar(false);
+    if (_bottomNavCubit != null) {
+      _bottomNavCubit!.setHideNavBar(false);
     }
     _scrollController.dispose();
     super.dispose();
@@ -63,7 +70,10 @@ class _HistoryBodyState extends State<_HistoryBody> {
       return false;
     }
 
-    final navCubit = context.read<BottomNavCubit>();
+    final navCubit = _bottomNavCubit;
+    if (navCubit == null) {
+      return false;
+    }
 
     switch (notification.direction) {
       case ScrollDirection.reverse:

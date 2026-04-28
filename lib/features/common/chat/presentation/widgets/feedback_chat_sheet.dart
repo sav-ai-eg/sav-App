@@ -12,6 +12,8 @@ class FeedbackChatSheet extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final VoidCallback onClose;
+  final bool isLoading;
+  final bool isSending;
 
   const FeedbackChatSheet({
     super.key,
@@ -19,6 +21,8 @@ class FeedbackChatSheet extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onClose,
+    required this.isLoading,
+    required this.isSending,
   });
 
   @override
@@ -41,24 +45,30 @@ class FeedbackChatSheet extends StatelessWidget {
               right: 16.w,
               top: 128.h,
               bottom: 84.h,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < messages.length; i++) ...[
-                      if (i > 0) SizedBox(height: 35.h),
-                      ChatBubble(message: messages[i]),
-                    ],
-                  ],
-                ),
-              ),
+              child: isLoading && messages.isEmpty
+                  ? const Center(child: CircularProgressIndicator.adaptive())
+                  : SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int i = 0; i < messages.length; i++) ...[
+                            if (i > 0) SizedBox(height: 35.h),
+                            ChatBubble(message: messages[i]),
+                          ],
+                        ],
+                      ),
+                    ),
             ),
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: ChatInputBar(controller: controller, onSend: onSend),
+              child: ChatInputBar(
+                controller: controller,
+                onSend: onSend,
+                enabled: !isSending,
+              ),
             ),
           ],
         ),
