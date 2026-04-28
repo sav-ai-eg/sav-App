@@ -58,7 +58,7 @@ class AppConstants {
   static const String _apiBaseUrlFromDefine = String.fromEnvironment(
     'SAV_API_BASE_URL',
   );
-  static const String _defaultApiBaseUrl = 'https://sav.up.railway.app';
+  static const String _defaultApiBaseUrl = 'https://sav-ktiyu.ondigitalocean.app';
 
   static String get apiBaseUrl {
     if (_apiBaseUrlFromDefine.isEmpty) {
@@ -94,6 +94,13 @@ class AppConstants {
 
   static bool _isBlockedHost(String host) {
     final normalizedHost = host.toLowerCase().trim();
+
+    // Legacy hosting (Railway) should never be used in current builds.
+    if (normalizedHost == 'sav.up.railway.app' ||
+        normalizedHost == 'saiv.up.railway.app' ||
+        normalizedHost.endsWith('.railway.app')) {
+      return true;
+    }
 
     if (normalizedHost == 'localhost' || normalizedHost == '10.0.2.2') {
       return true;

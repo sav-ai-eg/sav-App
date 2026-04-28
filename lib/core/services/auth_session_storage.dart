@@ -35,38 +35,72 @@ class AuthSessionStorage {
     required String accessToken,
     required String refreshToken,
   }) async {
-    await Future.wait<void>(<Future<void>>[
-      _secureStorage.write(
-        key: AppConstants.secureAccessToken,
-        value: accessToken.trim(),
-      ),
-      _secureStorage.write(
-        key: AppConstants.secureRefreshToken,
-        value: refreshToken.trim(),
-      ),
-    ]);
+    final normalizedAccessToken = accessToken.trim();
+    final normalizedRefreshToken = refreshToken.trim();
 
-    await _clearLegacyTokenPreferences();
+    var wroteToSecureStorage = false;
+    try {
+      await Future.wait<void>(<Future<void>>[
+        _secureStorage.write(
+          key: AppConstants.secureAccessToken,
+          value: normalizedAccessToken,
+        ),
+        _secureStorage.write(
+          key: AppConstants.secureRefreshToken,
+          value: normalizedRefreshToken,
+        ),
+      ]);
+      wroteToSecureStorage = true;
+    } catch (_) {
+      wroteToSecureStorage = false;
+    }
+
+    if (wroteToSecureStorage) {
+      await _clearLegacyTokenPreferences();
+      return;
+    }
+
+    await Future.wait<bool>(<Future<bool>>[
+      _prefs.setString(AppConstants.prefAccessToken, normalizedAccessToken),
+      _prefs.setString(AppConstants.prefRefreshToken, normalizedRefreshToken),
+    ]);
   }
 
   Future<void> saveRefreshedTokens({
     required String accessToken,
     String? refreshToken,
   }) async {
-    await _secureStorage.write(
-      key: AppConstants.secureAccessToken,
-      value: accessToken.trim(),
-    );
-
+    final normalizedAccessToken = accessToken.trim();
     final normalizedRefreshToken = refreshToken?.trim() ?? '';
-    if (normalizedRefreshToken.isNotEmpty) {
+
+    var wroteToSecureStorage = false;
+    try {
       await _secureStorage.write(
-        key: AppConstants.secureRefreshToken,
-        value: normalizedRefreshToken,
+        key: AppConstants.secureAccessToken,
+        value: normalizedAccessToken,
       );
+
+      if (normalizedRefreshToken.isNotEmpty) {
+        await _secureStorage.write(
+          key: AppConstants.secureRefreshToken,
+          value: normalizedRefreshToken,
+        );
+      }
+
+      wroteToSecureStorage = true;
+    } catch (_) {
+      wroteToSecureStorage = false;
     }
 
-    await _clearLegacyTokenPreferences();
+    if (wroteToSecureStorage) {
+      await _clearLegacyTokenPreferences();
+      return;
+    }
+
+    await _prefs.setString(AppConstants.prefAccessToken, normalizedAccessToken);
+    if (normalizedRefreshToken.isNotEmpty) {
+      await _prefs.setString(AppConstants.prefRefreshToken, normalizedRefreshToken);
+    }
   }
 
   Future<String> getAccessToken() {

@@ -1,9 +1,11 @@
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/constants/api_endpoints.dart';
+import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:sav/features/auth/data/models/auth_session_model.dart';
 import 'package:sav/features/auth/data/params/login_params.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   AuthRemoteDataSourceImpl(this._apiConsumer);
@@ -13,6 +15,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<AuthSessionModel> login({required LoginParams params}) async {
     try {
+      assert(() {
+        debugPrint(
+          '[Auth] POST ${AppConstants.apiBaseUrl}${ApiEndpoints.authLogin} (username=${params.username})',
+        );
+        return true;
+      }());
+
       final response = await _apiConsumer.post(
         ApiEndpoints.authLogin,
         body: params.toJson(),
@@ -21,6 +30,10 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
       final payload = response.data;
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        assert(() {
+          debugPrint('[Auth] login success (status=${response.statusCode})');
+          return true;
+        }());
         final session = AuthSessionModel.fromMap(payload);
         if (session.accessToken.isEmpty || session.refreshToken.isEmpty) {
           throw const ServerException('Login response is missing token data.');
@@ -28,15 +41,30 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         return session;
       }
 
+      assert(() {
+        debugPrint(
+          '[Auth] login failed (status=${response.statusCode}, payload=$payload)',
+        );
+        return true;
+      }());
+
       throw ServerException(
         _extractLoginErrorMessage(
           payload: payload,
           statusCode: response.statusCode,
         ),
       );
-    } on AppException {
+    } on AppException catch (exception) {
+      assert(() {
+        debugPrint('[Auth] login error: ${exception.message}');
+        return true;
+      }());
       rethrow;
     } catch (_) {
+      assert(() {
+        debugPrint('[Auth] login threw an unexpected exception');
+        return true;
+      }());
       throw const UnknownException();
     }
   }
