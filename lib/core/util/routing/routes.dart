@@ -13,5 +13,7 @@ class Routes {
   static const String notificationView = '/notificationView';
   static const String emergencyView = '/emergencyView';
   static const String feedbackView = '/feedbackView';
+  static const String feedbackChatView = '/feedbackChatView';
+  static const String feedbackChatPromptView = '/feedbackChatPromptView';
   static const String editProfileView = '/editProfileView';
 }

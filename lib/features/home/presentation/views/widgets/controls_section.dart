@@ -209,14 +209,7 @@ class _InboxButton extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Inbox will be available soon.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        context.pushWithNamed(Routes.feedbackChatView);
       },
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),

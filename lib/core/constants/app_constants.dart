@@ -59,12 +59,10 @@ class AppConstants {
     'SAV_API_BASE_URL',
   );
   static const String _defaultApiBaseUrl = 'https://sav-ktiyu.ondigitalocean.app';
-
   static String get apiBaseUrl {
     if (_apiBaseUrlFromDefine.isEmpty) {
       return _defaultApiBaseUrl;
     }
-
     return _normalizeApiBaseUrl(_apiBaseUrlFromDefine);
   }
 

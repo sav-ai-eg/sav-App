@@ -6,6 +6,8 @@ import 'package:sav/features/auth/presentation/cubit/login_cubit.dart';
 import 'package:sav/features/auth/presentation/views/login_view.dart';
 import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/common/bottom_nav/presentation/views/bottom_nav_view.dart';
+import 'package:sav/features/common/chat/presentation/views/feedback_chat_prompt_view.dart';
+import 'package:sav/features/common/chat/presentation/views/feedback_chat_view.dart';
 import 'package:sav/features/emergency/presentation/views/emergency_view.dart';
 import 'package:sav/features/splash/presentation/cubit/splash_cubit.dart';
 import 'package:sav/features/splash/presentation/views/splash_view.dart';
@@ -39,8 +41,14 @@ class AppRouter {
         );
 
       case Routes.emergencyView:
+        return MaterialPageRoute(builder: (_) => const EmergencyView());
+
+      case Routes.feedbackChatView:
+        return MaterialPageRoute(builder: (_) => const FeedbackChatView());
+
+      case Routes.feedbackChatPromptView:
         return MaterialPageRoute(
-          builder: (_) => const EmergencyView(),
+          builder: (_) => const FeedbackChatPromptView(),
         );
 
       case Routes.notificationView:
@@ -57,9 +65,7 @@ class AppRouter {
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(
-              child: Text('No route defined for ${settings.name}'),
-            ),
+            body: Center(child: Text('No route defined for ${settings.name}')),
           ),
         );
     }
