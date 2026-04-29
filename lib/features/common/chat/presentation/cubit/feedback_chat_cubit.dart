@@ -21,14 +21,13 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
         super(
           FeedbackChatState.initial(
             messages: preset == FeedbackChatPreset.prompt
-                ? const [
-                    ChatMessage(
+                ? [
+                    ChatMessage.admin(
                       text:
                           'have any problem Ahmed ?\nyou had an alert from a while',
-                      isIncoming: true,
                     ),
                   ]
-                : const [],
+                : [],
           ),
         ) {
     _bootstrapChat();
@@ -182,9 +181,19 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
   }
 
   ChatMessage _mapMessage(ChatMessageEntity message) {
-    return ChatMessage(
-      text: message.text,
-      isIncoming: !message.isOwn,
-    );
+    if (message.isOwn) {
+      return ChatMessage.driver(text: message.text);
+    } else {
+      // Show actual admin name if available
+      final senderName = message.sender != null
+          ? '${message.sender!.firstName} ${message.sender!.lastName}'.trim()
+          : 'Admin';
+      return ChatMessage(
+        text: message.text,
+        isIncoming: true,
+        senderName: senderName.isNotEmpty ? senderName : 'Admin',
+        senderRole: 'admin',
+      );
+    }
   }
 }

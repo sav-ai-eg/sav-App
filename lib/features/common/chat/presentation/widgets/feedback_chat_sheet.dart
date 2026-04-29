@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_assets.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/features/common/chat/data/models/chat_message.dart';
@@ -35,15 +36,69 @@ class FeedbackChatSheet extends StatelessWidget {
         child: Stack(
           children: [
             Container(color: AppColors.scaffoldColor),
+            // Chat Header
             Positioned(
-              left: 16.w,
-              top: 56.h,
-              child: _CloseButton(onTap: onClose),
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 120.h,
+              child: Container(
+                color: AppColors.whiteColor,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 16.w,
+                      top: 56.h,
+                      child: _CloseButton(onTap: onClose),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 16.h,
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 48.w,
+                            height: 48.w,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.admin_panel_settings,
+                              color: AppColors.primaryColor,
+                              size: 28.sp,
+                            ),
+                          ),
+                          SizedBox(height: 12.h),
+                          Text(
+                            'Chat with Admin',
+                            style: GoogleFonts.inter(
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.darkNavy,
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            'Get help and support',
+                            style: GoogleFonts.inter(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.grayColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             Positioned(
               left: 16.w,
               right: 16.w,
-              top: 128.h,
+              top: 148.h,
               bottom: 84.h,
               child: isLoading && messages.isEmpty
                   ? const Center(child: CircularProgressIndicator.adaptive())
@@ -53,9 +108,10 @@ class FeedbackChatSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (int i = 0; i < messages.length; i++) ...[
-                            if (i > 0) SizedBox(height: 35.h),
+                            if (i > 0) SizedBox(height: 16.h),
                             ChatBubble(message: messages[i]),
                           ],
+                          if (messages.isNotEmpty) SizedBox(height: 16.h),
                         ],
                       ),
                     ),

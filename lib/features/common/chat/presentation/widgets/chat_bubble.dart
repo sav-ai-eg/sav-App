@@ -25,26 +25,49 @@ class ChatBubble extends StatelessWidget {
 
     return Align(
       alignment: alignment,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: isIncoming ? 265.w : 214.w,
-          minHeight: 84.h,
-        ),
-        padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 18.h),
-        decoration: BoxDecoration(
-          color: bubbleColor,
-          borderRadius: borderRadius,
-        ),
-        child: Text(
-          message.text,
-          style: GoogleFonts.inter(
-            fontSize: 15.sp,
-            fontWeight: FontWeight.w400,
-            color: Colors.white,
-            letterSpacing: -0.165,
-            height: 1.5,
+      child: Column(
+        crossAxisAlignment: isIncoming ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        children: [
+          // Sender name
+          if (message.senderName.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(
+                left: isIncoming ? 0 : 20.w,
+                right: isIncoming ? 20.w : 0,
+                bottom: 4.h,
+              ),
+              child: Text(
+                message.senderName,
+                style: GoogleFonts.inter(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.grayColor,
+                ),
+              ),
+            ),
+          // Message bubble
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: isIncoming ? 265.w : 214.w,
+              minHeight: 84.h,
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 18.h),
+            decoration: BoxDecoration(
+              color: bubbleColor,
+              borderRadius: borderRadius,
+            ),
+            child: Text(
+              message.text,
+              style: GoogleFonts.inter(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w400,
+                color: Colors.white,
+                letterSpacing: -0.165,
+                height: 1.5,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
