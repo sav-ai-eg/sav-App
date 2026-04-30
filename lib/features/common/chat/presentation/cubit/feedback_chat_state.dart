@@ -17,9 +17,9 @@ class FeedbackChatState {
     required this.conversationId,
   });
 
-  factory FeedbackChatState.initial({required List<ChatMessage> messages}) {
-    return FeedbackChatState(
-      messages: List<ChatMessage>.unmodifiable(messages),
+  factory FeedbackChatState.initial() {
+    return const FeedbackChatState(
+      messages: <ChatMessage>[],
       status: FeedbackChatStatus.initial,
       errorMessage: null,
       conversationId: null,
@@ -40,7 +40,9 @@ class FeedbackChatState {
     return FeedbackChatState(
       messages: List<ChatMessage>.unmodifiable(messages ?? this.messages),
       status: status ?? this.status,
-      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
+      errorMessage: clearErrorMessage
+          ? null
+          : (errorMessage ?? this.errorMessage),
       conversationId: conversationId ?? this.conversationId,
     );
   }

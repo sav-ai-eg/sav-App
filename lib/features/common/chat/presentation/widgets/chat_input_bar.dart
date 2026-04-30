@@ -3,7 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
 
-class ChatInputBar extends StatelessWidget {
+class ChatInputBar extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final bool enabled;
@@ -16,59 +16,172 @@ class ChatInputBar extends StatelessWidget {
   });
 
   @override
+  State<ChatInputBar> createState() => _ChatInputBarState();
+}
+
+class _ChatInputBarState extends State<ChatInputBar> {
+  late FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 84.h,
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      decoration: BoxDecoration(
-        color: AppColors.whiteColor,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              textCapitalization: TextCapitalization.sentences,
-              style: GoogleFonts.inter(
-                fontSize: 20.sp,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textPrimaryColor,
-                letterSpacing: -0.22,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Text Here',
-                hintStyle: GoogleFonts.inter(
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.hintColor,
-                  letterSpacing: -0.22,
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.whiteColor,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+          border: Border(
+            top: BorderSide(color: AppColors.lightGrayColor, width: 1),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: AnimatedBuilder(
+                  animation: _focusNode,
+                  builder: (context, child) {
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.scaffoldColor,
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(
+                          color: _focusNode.hasFocus
+                              ? AppColors.primaryColor
+                              : AppColors.lightGrayColor,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: child,
+                    );
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 2.h,
+                    ),
+                    child: _MessageTextField(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      enabled: widget.enabled,
+                    ),
+                  ),
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
               ),
+              SizedBox(width: 10.w),
+              _SendButton(
+                enabled: widget.enabled,
+                onTap: () {
+                  widget.onSend();
+                  _focusNode.requestFocus();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+
+  const _MessageTextField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      textCapitalization: TextCapitalization.sentences,
+      enabled: enabled,
+      maxLines: 4,
+      minLines: 1,
+      style: GoogleFonts.inter(
+        fontSize: 14.sp,
+        fontWeight: FontWeight.w400,
+        color: AppColors.textPrimaryColor,
+      ),
+      decoration: InputDecoration(
+        hintText: enabled ? 'Type message...' : 'Chat is loading...',
+        hintStyle: GoogleFonts.inter(
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w400,
+          color: AppColors.hintColor,
+        ),
+        border: InputBorder.none,
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 10.h),
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _SendButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12.r),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: enabled
+                ? AppColors.primaryColor
+                : AppColors.primaryColor.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12.r),
+            boxShadow: enabled
+                ? [
+                    BoxShadow(
+                      color: AppColors.primaryColor.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: SizedBox(
+            width: 44.w,
+            height: 44.w,
+            child: Center(
+              child: Icon(Icons.send_rounded, color: Colors.white, size: 20.sp),
             ),
           ),
-          SizedBox(width: 16.w),
-          GestureDetector(
-            onTap: enabled ? onSend : null,
-            child: Container(
-              width: 48.w,
-              height: 48.w,
-              decoration: const BoxDecoration(
-                color: AppColors.primaryColor,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.send_rounded,
-                color: Colors.white.withValues(alpha: enabled ? 1 : 0.4),
-                size: 24.sp,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sav/core/constants/app_assets.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/util/routing/routes.dart';
 import 'package:sav/features/common/chat/presentation/cubit/chat_conversations_cubit.dart';
 import 'package:sav/features/common/chat/presentation/widgets/chat_conversation_item.dart';
 
@@ -16,19 +18,45 @@ class ChatConversationsView extends StatefulWidget {
 
 class _ChatConversationsViewState extends State<ChatConversationsView> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   late final ChatConversationsCubit _cubit;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
     _cubit = context.read<ChatConversationsCubit>();
+    _scrollController.addListener(_handleScroll);
     _cubit.loadConversations();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    if (_scrollController.position.extentAfter > 320) {
+      return;
+    }
+
+    _cubit.loadMoreConversations(search: _searchController.text.trim());
+  }
+
+  void _handleSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _cubit.refreshConversations(search: value.trim());
+    });
   }
 
   @override
@@ -48,17 +76,12 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: AppColors.darkNavy,
-            size: 24.sp,
-          ),
+          icon: Icon(Icons.arrow_back, color: AppColors.darkNavy, size: 24.sp),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: Column(
         children: [
-          // Search Bar
           Container(
             color: AppColors.whiteColor,
             padding: EdgeInsets.all(16.w),
@@ -86,17 +109,24 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
                   vertical: 12.h,
                 ),
               ),
-              onChanged: (value) {
-                _cubit.refreshConversations(search: value.trim());
-              },
+              onChanged: _handleSearchChanged,
             ),
           ),
-          // Conversations List
           Expanded(
-            child: BlocBuilder<ChatConversationsCubit, ChatConversationsState>(
+            child: BlocConsumer<ChatConversationsCubit, ChatConversationsState>(
+              listener: (context, state) {
+                final errorMessage = state.errorMessage;
+                if (errorMessage != null && errorMessage.isNotEmpty) {
+                  ScaffoldMessenger.of(context)
+                    ..removeCurrentSnackBar()
+                    ..showSnackBar(SnackBar(content: Text(errorMessage)));
+                }
+              },
               builder: (context, state) {
                 if (state.conversations.isEmpty && state.isLoading) {
-                  return const Center(child: CircularProgressIndicator.adaptive());
+                  return const Center(
+                    child: CircularProgressIndicator.adaptive(),
+                  );
                 }
 
                 if (state.conversations.isEmpty && !state.isLoading) {
@@ -128,14 +158,16 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
                     search: _searchController.text.trim(),
                   ),
                   child: ListView.builder(
+                    controller: _scrollController,
                     padding: EdgeInsets.only(top: 8.h, bottom: 16.h),
-                    itemCount: state.conversations.length + (state.hasMore ? 1 : 0),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    cacheExtent: 900,
+                    addAutomaticKeepAlives: false,
+                    itemCount:
+                        state.conversations.length + (state.hasMore ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == state.conversations.length) {
-                        // Load more indicator
-                        _cubit.loadMoreConversations(
-                          search: _searchController.text.trim(),
-                        );
                         return Padding(
                           padding: EdgeInsets.all(16.w),
                           child: const Center(
@@ -146,20 +178,22 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
 
                       final conversation = state.conversations[index];
                       final driverName = conversation.driver != null
-                          ? '${conversation.driver!.firstName} ${conversation.driver!.lastName}'.trim()
+                          ? '${conversation.driver!.firstName} ${conversation.driver!.lastName}'
+                                .trim()
                           : 'Unknown Driver';
 
                       return ChatConversationItem(
+                        key: ValueKey<int>(conversation.id),
                         id: conversation.id,
                         driverName: driverName,
-                        lastMessage: conversation.lastMessage?.text ?? 'No messages yet',
+                        lastMessage:
+                            conversation.lastMessage?.text ?? 'No messages yet',
                         lastMessageAt: conversation.lastMessageAt,
                         unreadCount: conversation.unreadCount,
                         onTap: () {
-                          // Navigate to chat view with this conversation
                           Navigator.of(context).pushNamed(
-                            '/chat',
-                            arguments: {'conversationId': conversation.id},
+                            Routes.feedbackChatView,
+                            arguments: conversation.id,
                           );
                         },
                       );

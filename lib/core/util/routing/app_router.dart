@@ -7,7 +7,8 @@ import 'package:sav/features/auth/presentation/views/login_view.dart';
 import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/common/bottom_nav/presentation/views/bottom_nav_view.dart';
 import 'package:sav/features/common/chat/presentation/cubit/feedback_chat_cubit.dart';
-import 'package:sav/features/common/chat/presentation/views/feedback_chat_prompt_view.dart';
+import 'package:sav/features/common/chat/presentation/cubit/chat_conversations_cubit.dart';
+import 'package:sav/features/common/chat/presentation/views/chat_conversations_view.dart';
 import 'package:sav/features/common/chat/presentation/views/feedback_chat_view.dart';
 import 'package:sav/features/emergency/presentation/views/emergency_view.dart';
 import 'package:sav/features/splash/presentation/cubit/splash_cubit.dart';
@@ -45,6 +46,23 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const EmergencyView());
 
       case Routes.feedbackChatView:
+        final arguments = settings.arguments;
+        final conversationId = arguments is int
+            ? arguments
+            : arguments is Map<String, dynamic>
+            ? arguments['conversationId'] as int?
+            : null;
+
+        if (conversationId != null) {
+          return MaterialPageRoute(
+            builder: (_) => BlocProvider(
+              create: (_) =>
+                  FeedbackChatCubit(initialConversationId: conversationId),
+              child: const FeedbackChatView(),
+            ),
+          );
+        }
+
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
             create: (_) => FeedbackChatCubit.full(),
@@ -55,8 +73,16 @@ class AppRouter {
       case Routes.feedbackChatPromptView:
         return MaterialPageRoute(
           builder: (_) => BlocProvider(
-            create: (_) => FeedbackChatCubit.prompt(),
-            child: const FeedbackChatPromptView(),
+            create: (_) => FeedbackChatCubit(),
+            child: const FeedbackChatView(),
+          ),
+        );
+
+      case Routes.chatConversationsView:
+        return MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (_) => ChatConversationsCubit(),
+            child: const ChatConversationsView(),
           ),
         );
 

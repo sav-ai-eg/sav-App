@@ -27,11 +27,6 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
   final TextEditingController _controller = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -67,15 +62,22 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
           ),
           Align(
             alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              top: false,
-              child: FeedbackChatSheet(
-                messages: widget.messages,
-                controller: _controller,
-                onSend: _handleSend,
-                onClose: _handleClose,
-                isLoading: widget.isLoading,
-                isSending: widget.isSending,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: SafeArea(
+                top: false,
+                child: FeedbackChatSheet(
+                  messages: widget.messages,
+                  controller: _controller,
+                  onSend: _handleSend,
+                  onClose: _handleClose,
+                  isLoading: widget.isLoading,
+                  isSending: widget.isSending,
+                ),
               ),
             ),
           ),

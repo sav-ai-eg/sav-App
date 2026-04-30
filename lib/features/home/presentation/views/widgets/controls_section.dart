@@ -209,7 +209,7 @@ class _InboxButton extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        context.pushWithNamed(Routes.feedbackChatView);
+        context.pushWithNamed(Routes.chatConversationsView);
       },
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),

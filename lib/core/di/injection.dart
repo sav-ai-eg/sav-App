@@ -19,6 +19,7 @@ import 'package:sav/features/common/chat/data/datasources/chat_remote_data_sourc
 import 'package:sav/features/common/chat/data/repositories/chat_repository_impl.dart';
 import 'package:sav/features/common/chat/domain/repositories/chat_repository.dart';
 import 'package:sav/features/common/chat/domain/usecases/bootstrap_chat_conversation_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/load_chat_conversations_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/load_chat_messages_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/load_chat_unread_summary_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/mark_chat_conversation_read_use_case.dart';
@@ -179,6 +180,11 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<BootstrapChatConversationUseCase>()) {
     getIt.registerLazySingleton<BootstrapChatConversationUseCase>(
       () => BootstrapChatConversationUseCase(getIt<ChatRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadChatConversationsUseCase>()) {
+    getIt.registerLazySingleton<LoadChatConversationsUseCase>(
+      () => LoadChatConversationsUseCase(getIt<ChatRepository>()),
     );
   }
   if (!getIt.isRegistered<LoadChatMessagesUseCase>()) {

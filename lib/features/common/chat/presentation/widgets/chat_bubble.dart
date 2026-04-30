@@ -16,58 +16,92 @@ class ChatBubble extends StatelessWidget {
         ? AppColors.darkNavy
         : AppColors.primaryColor;
     final alignment = isIncoming ? Alignment.centerLeft : Alignment.centerRight;
-    final borderRadius = BorderRadius.only(
-      topLeft: Radius.circular(isIncoming ? 0 : 20.r),
-      topRight: Radius.circular(isIncoming ? 20.r : 0),
-      bottomLeft: Radius.circular(20.r),
-      bottomRight: Radius.circular(20.r),
-    );
 
     return Align(
       alignment: alignment,
       child: Column(
-        crossAxisAlignment: isIncoming ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        crossAxisAlignment: isIncoming
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.end,
         children: [
-          // Sender name
           if (message.senderName.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(
-                left: isIncoming ? 0 : 20.w,
-                right: isIncoming ? 20.w : 0,
-                bottom: 4.h,
-              ),
-              child: Text(
-                message.senderName,
-                style: GoogleFonts.inter(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.grayColor,
-                ),
-              ),
-            ),
-          // Message bubble
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: isIncoming ? 265.w : 214.w,
-              minHeight: 84.h,
-            ),
-            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 18.h),
-            decoration: BoxDecoration(
-              color: bubbleColor,
-              borderRadius: borderRadius,
-            ),
-            child: Text(
-              message.text,
-              style: GoogleFonts.inter(
-                fontSize: 15.sp,
-                fontWeight: FontWeight.w400,
-                color: Colors.white,
-                letterSpacing: -0.165,
-                height: 1.5,
-              ),
-            ),
+            _SenderLabel(senderName: message.senderName),
+          _BubbleBody(
+            text: message.text,
+            isIncoming: isIncoming,
+            bubbleColor: bubbleColor,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SenderLabel extends StatelessWidget {
+  final String senderName;
+
+  const _SenderLabel({required this.senderName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 6.h),
+      child: Text(
+        senderName,
+        style: GoogleFonts.inter(
+          fontSize: 11.sp,
+          fontWeight: FontWeight.w500,
+          color: AppColors.grayColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _BubbleBody extends StatelessWidget {
+  final String text;
+  final bool isIncoming;
+  final Color bubbleColor;
+
+  const _BubbleBody({
+    required this.text,
+    required this.isIncoming,
+    required this.bubbleColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+        minHeight: 44.h,
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20.r),
+          topRight: Radius.circular(20.r),
+          bottomLeft: Radius.circular(isIncoming ? 4.r : 20.r),
+          bottomRight: Radius.circular(isIncoming ? 20.r : 4.r),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: bubbleColor.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w400,
+          color: Colors.white,
+          height: 1.4,
+        ),
+        softWrap: true,
       ),
     );
   }

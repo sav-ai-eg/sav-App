@@ -7,8 +7,8 @@ part 'chat_conversations_state.dart';
 
 class ChatConversationsCubit extends Cubit<ChatConversationsState> {
   ChatConversationsCubit()
-      : _loadConversationsUseCase = getIt<LoadChatConversationsUseCase>(),
-        super(const ChatConversationsState.initial());
+    : _loadConversationsUseCase = getIt<LoadChatConversationsUseCase>(),
+      super(const ChatConversationsState.initial());
 
   final LoadChatConversationsUseCase _loadConversationsUseCase;
 
@@ -19,7 +19,7 @@ class ChatConversationsCubit extends Cubit<ChatConversationsState> {
   }) async {
     if (state.isLoading) return;
 
-    emit(state.copyWith(isLoading: true, errorMessage: null));
+    emit(state.copyWith(isLoading: true, clearErrorMessage: true));
 
     final result = await _loadConversationsUseCase(
       page: page,
@@ -29,42 +29,42 @@ class ChatConversationsCubit extends Cubit<ChatConversationsState> {
 
     result.fold(
       (failure) {
-        emit(state.copyWith(
-          isLoading: false,
-          errorMessage: failure.message,
-        ));
+        emit(state.copyWith(isLoading: false, errorMessage: failure.message));
       },
       (conversations) {
         final isFirstPage = page == 1;
-        final currentConversations = isFirstPage ? <ChatConversationEntity>[] : List.of(state.conversations);
+        final currentConversations = isFirstPage
+            ? <ChatConversationEntity>[]
+            : List<ChatConversationEntity>.of(state.conversations);
         currentConversations.addAll(conversations);
 
-        emit(state.copyWith(
-          conversations: currentConversations,
-          isLoading: false,
-          hasMore: conversations.length == pageSize,
-          currentPage: page,
-          errorMessage: null,
-        ));
+        emit(
+          state.copyWith(
+            conversations: currentConversations,
+            isLoading: false,
+            hasMore: conversations.length == pageSize,
+            currentPage: page,
+            clearErrorMessage: true,
+          ),
+        );
       },
     );
   }
 
   Future<void> refreshConversations({String? search}) async {
-    emit(state.copyWith(
-      conversations: [],
-      currentPage: 0,
-      hasMore: true,
-      errorMessage: null,
-    ));
+    emit(
+      state.copyWith(
+        conversations: [],
+        currentPage: 0,
+        hasMore: true,
+        clearErrorMessage: true,
+      ),
+    );
     await loadConversations(search: search);
   }
 
   Future<void> loadMoreConversations({String? search}) async {
     if (!state.hasMore || state.isLoading) return;
-    await loadConversations(
-      page: state.currentPage + 1,
-      search: search,
-    );
+    await loadConversations(page: state.currentPage + 1, search: search);
   }
 }

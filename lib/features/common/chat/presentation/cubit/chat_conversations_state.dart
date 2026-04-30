@@ -10,11 +10,11 @@ class ChatConversationsState {
   });
 
   const ChatConversationsState.initial()
-      : conversations = const [],
-        isLoading = false,
-        hasMore = true,
-        currentPage = 0,
-        errorMessage = null;
+    : conversations = const [],
+      isLoading = false,
+      hasMore = true,
+      currentPage = 0,
+      errorMessage = null;
 
   final List<ChatConversationEntity> conversations;
   final bool isLoading;
@@ -28,13 +28,16 @@ class ChatConversationsState {
     bool? hasMore,
     int? currentPage,
     String? errorMessage,
+    bool clearErrorMessage = false,
   }) {
     return ChatConversationsState(
       conversations: conversations ?? this.conversations,
       isLoading: isLoading ?? this.isLoading,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
-      errorMessage: errorMessage ?? this.errorMessage,
+      errorMessage: clearErrorMessage
+          ? null
+          : (errorMessage ?? this.errorMessage),
     );
   }
 }
