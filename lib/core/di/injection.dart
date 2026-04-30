@@ -73,7 +73,7 @@ Future<void> configureDependencies() async {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          validateStatus: (int? status) => status != null && status < 500,
+          validateStatus: (int? status) => status != null && status < 600,
         ),
       ),
     );

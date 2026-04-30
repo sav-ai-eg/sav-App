@@ -12,7 +12,9 @@ class FeedbackChatView extends StatelessWidget {
     return BlocConsumer<FeedbackChatCubit, FeedbackChatState>(
       listener: (context, state) {
         final errorMessage = state.errorMessage;
-        if (errorMessage != null && errorMessage.isNotEmpty) {
+        if (errorMessage != null &&
+            errorMessage.isNotEmpty &&
+            state.status != FeedbackChatStatus.error) {
           ScaffoldMessenger.of(context)
             ..removeCurrentSnackBar()
             ..showSnackBar(SnackBar(content: Text(errorMessage)));
@@ -22,8 +24,12 @@ class FeedbackChatView extends StatelessWidget {
         return FeedbackChatScaffold(
           messages: state.messages,
           onSendText: context.read<FeedbackChatCubit>().sendText,
+          onRetry: context.read<FeedbackChatCubit>().retryOpen,
           isLoading: state.isLoading,
           isSending: state.isSending,
+          errorMessage: state.status == FeedbackChatStatus.error
+              ? state.errorMessage
+              : null,
         );
       },
     );

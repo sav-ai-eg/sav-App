@@ -5,7 +5,7 @@ import 'package:sav/core/constants/app_colors.dart';
 
 class ChatInputBar extends StatefulWidget {
   final TextEditingController controller;
-  final VoidCallback onSend;
+  final Future<void> Function() onSend;
   final bool enabled;
 
   const ChatInputBar({
@@ -41,15 +41,17 @@ class _ChatInputBarState extends State<ChatInputBar> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.whiteColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
           border: Border(
-            top: BorderSide(color: AppColors.lightGrayColor, width: 1),
+            top: BorderSide(
+              color: AppColors.primaryColor.withValues(alpha: 0.08),
+              width: 1,
+            ),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, -2),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, -8),
             ),
           ],
         ),
@@ -64,12 +66,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   builder: (context, child) {
                     return DecoratedBox(
                       decoration: BoxDecoration(
-                        color: AppColors.scaffoldColor,
-                        borderRadius: BorderRadius.circular(12.r),
+                        color: _focusNode.hasFocus
+                            ? AppColors.whiteColor
+                            : AppColors.primaryColor.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(14.r),
                         border: Border.all(
                           color: _focusNode.hasFocus
                               ? AppColors.primaryColor
-                              : AppColors.lightGrayColor,
+                              : AppColors.primaryColor.withValues(alpha: 0.12),
                           width: 1.5,
                         ),
                       ),
@@ -92,8 +96,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
               SizedBox(width: 10.w),
               _SendButton(
                 enabled: widget.enabled,
-                onTap: () {
-                  widget.onSend();
+                onTap: () async {
+                  await widget.onSend();
                   _focusNode.requestFocus();
                 },
               ),
@@ -147,7 +151,7 @@ class _MessageTextField extends StatelessWidget {
 
 class _SendButton extends StatelessWidget {
   final bool enabled;
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
 
   const _SendButton({required this.enabled, required this.onTap});
 
@@ -156,7 +160,7 @@ class _SendButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: enabled ? onTap : null,
+        onTap: enabled ? () => onTap() : null,
         borderRadius: BorderRadius.circular(12.r),
         child: DecoratedBox(
           decoration: BoxDecoration(

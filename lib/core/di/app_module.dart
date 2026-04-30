@@ -6,19 +6,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 @module
 abstract class AppModule {
   @lazySingleton
-  Dio get dio =>
-      Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
-          sendTimeout: const Duration(seconds: 20),
-          headers: const <String, String>{
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          validateStatus: (int? status) => status != null && status < 500,
-        ),
-      );
+  Dio get dio => Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      headers: const <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      validateStatus: (int? status) => status != null && status < 600,
+    ),
+  );
 
   @preResolve
   @singleton

@@ -36,7 +36,14 @@ class ChatConversationsCubit extends Cubit<ChatConversationsState> {
         final currentConversations = isFirstPage
             ? <ChatConversationEntity>[]
             : List<ChatConversationEntity>.of(state.conversations);
-        currentConversations.addAll(conversations);
+        final existingIds = currentConversations
+            .map((conversation) => conversation.id)
+            .toSet();
+        for (final conversation in conversations) {
+          if (existingIds.add(conversation.id)) {
+            currentConversations.add(conversation);
+          }
+        }
 
         emit(
           state.copyWith(
@@ -55,6 +62,7 @@ class ChatConversationsCubit extends Cubit<ChatConversationsState> {
     emit(
       state.copyWith(
         conversations: [],
+        isLoading: false,
         currentPage: 0,
         hasMore: true,
         clearErrorMessage: true,

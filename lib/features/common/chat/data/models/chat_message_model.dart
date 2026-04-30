@@ -17,17 +17,25 @@ class ChatMessageModel extends ChatMessageEntity {
     final senderPayload = map['sender'];
     final sender = senderPayload is Map<String, dynamic>
         ? AuthUserModel.fromMap(senderPayload)
+        : senderPayload is Map
+        ? AuthUserModel.fromMap(Map<String, dynamic>.from(senderPayload))
         : null;
 
     return ChatMessageModel(
       id: _toInt(map['id']),
-      conversationId: _toInt(map['conversation_id']),
-      senderId: _toInt(map['sender_id']),
+      conversationId: _toInt(
+        map['conversation_id'] ?? map['conversationId'] ?? map['conversation'],
+      ),
+      senderId: _toInt(
+        map['sender_id'] ??
+            map['senderId'] ??
+            (senderPayload is Map ? senderPayload['id'] : senderPayload),
+      ),
       sender: sender,
-      text: (map['text'] ?? '').toString(),
-      isOwn: _toBool(map['is_own']),
-      createdAt: _toDateTime(map['created_at']),
-      updatedAt: _toDateTime(map['updated_at']),
+      text: (map['text'] ?? map['message'] ?? '').toString(),
+      isOwn: _toBool(map['is_own'] ?? map['isOwn'] ?? map['is_sender']),
+      createdAt: _toDateTime(map['created_at'] ?? map['createdAt']),
+      updatedAt: _toDateTime(map['updated_at'] ?? map['updatedAt']),
     );
   }
 
@@ -42,6 +50,10 @@ class ChatMessageModel extends ChatMessageEntity {
   static bool _toBool(dynamic value) {
     if (value is bool) {
       return value;
+    }
+
+    if (value is num) {
+      return value != 0;
     }
 
     return (value ?? '').toString().toLowerCase() == 'true';

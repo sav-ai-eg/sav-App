@@ -30,6 +30,7 @@ class ChatBubble extends StatelessWidget {
             text: message.text,
             isIncoming: isIncoming,
             bubbleColor: bubbleColor,
+            createdAt: message.createdAt,
           ),
         ],
       ),
@@ -62,11 +63,13 @@ class _BubbleBody extends StatelessWidget {
   final String text;
   final bool isIncoming;
   final Color bubbleColor;
+  final DateTime? createdAt;
 
   const _BubbleBody({
     required this.text,
     required this.isIncoming,
     required this.bubbleColor,
+    required this.createdAt,
   });
 
   @override
@@ -76,7 +79,7 @@ class _BubbleBody extends StatelessWidget {
         maxWidth: MediaQuery.sizeOf(context).width * 0.75,
         minHeight: 44.h,
       ),
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 11.h),
       decoration: BoxDecoration(
         color: bubbleColor,
         borderRadius: BorderRadius.only(
@@ -93,16 +96,42 @@ class _BubbleBody extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-          fontSize: 14.sp,
-          fontWeight: FontWeight.w400,
-          color: Colors.white,
-          height: 1.4,
-        ),
-        softWrap: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w400,
+              color: Colors.white,
+              height: 1.4,
+            ),
+            softWrap: true,
+          ),
+          if (createdAt != null) ...[
+            SizedBox(height: 5.h),
+            Text(
+              _formatTime(createdAt!),
+              style: GoogleFonts.inter(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.72),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }

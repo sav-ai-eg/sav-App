@@ -62,7 +62,7 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldColor,
+      backgroundColor: AppColors.whiteColor,
       appBar: AppBar(
         backgroundColor: AppColors.whiteColor,
         elevation: 0,
@@ -99,10 +99,25 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
                   size: 20.sp,
                 ),
                 filled: true,
-                fillColor: AppColors.scaffoldColor,
+                fillColor: AppColors.primaryColor.withValues(alpha: 0.04),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12.r),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(
+                    color: AppColors.primaryColor.withValues(alpha: 0.10),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: BorderSide(
+                    color: AppColors.primaryColor.withValues(alpha: 0.10),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: const BorderSide(
+                    color: AppColors.primaryColor,
+                    width: 1.4,
+                  ),
                 ),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 16.w,
@@ -129,27 +144,22 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
                   );
                 }
 
-                if (state.conversations.isEmpty && !state.isLoading) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 64.sp,
-                          color: AppColors.grayColor,
-                        ),
-                        SizedBox(height: 16.h),
-                        Text(
-                          'No conversations yet',
-                          style: GoogleFonts.inter(
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.grayColor,
-                          ),
-                        ),
-                      ],
+                if (state.conversations.isEmpty &&
+                    !state.isLoading &&
+                    state.errorMessage != null) {
+                  return _ConversationsErrorState(
+                    message: state.errorMessage!,
+                    onRetry: () => _cubit.refreshConversations(
+                      search: _searchController.text.trim(),
                     ),
+                  );
+                }
+
+                if (state.conversations.isEmpty && !state.isLoading) {
+                  return _EmptyConversationsState(
+                    onStartChat: () {
+                      Navigator.of(context).pushNamed(Routes.feedbackChatView);
+                    },
                   );
                 }
 
@@ -204,6 +214,134 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConversationsErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ConversationsErrorState({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 28.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 58.sp,
+              color: AppColors.errorColor,
+            ),
+            SizedBox(height: 14.h),
+            Text(
+              'Inbox could not load',
+              style: GoogleFonts.inter(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkNavy,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              message,
+              style: GoogleFonts.inter(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w500,
+                color: AppColors.subtitleGray,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 18.h),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: AppColors.whiteColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyConversationsState extends StatelessWidget {
+  final VoidCallback onStartChat;
+
+  const _EmptyConversationsState({required this.onStartChat});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 28.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 70.w,
+              height: 70.w,
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.forum_outlined,
+                size: 34.sp,
+                color: AppColors.primaryColor,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'No conversations yet',
+              style: GoogleFonts.inter(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkNavy,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'Start a support chat and it will stay here for later.',
+              style: GoogleFonts.inter(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w500,
+                color: AppColors.subtitleGray,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 18.h),
+            FilledButton.icon(
+              onPressed: onStartChat,
+              icon: const Icon(Icons.add_comment_outlined),
+              label: const Text('Start chat'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: AppColors.whiteColor,
+                padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

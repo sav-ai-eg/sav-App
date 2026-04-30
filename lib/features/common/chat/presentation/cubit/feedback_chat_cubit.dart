@@ -3,6 +3,7 @@ import 'package:sav/core/di/injection.dart';
 import 'package:sav/features/common/chat/data/models/chat_message.dart';
 import 'package:sav/features/common/chat/domain/entities/chat_message_entity.dart';
 import 'package:sav/features/common/chat/domain/usecases/bootstrap_chat_conversation_use_case.dart';
+import 'package:sav/features/common/chat/domain/usecases/load_chat_conversations_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/load_chat_messages_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/mark_chat_conversation_read_use_case.dart';
 import 'package:sav/features/common/chat/domain/usecases/send_chat_message_use_case.dart';
@@ -12,12 +13,16 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
   FeedbackChatCubit({
     this.initialConversationId,
     BootstrapChatConversationUseCase? bootstrapChatConversationUseCase,
+    LoadChatConversationsUseCase? loadChatConversationsUseCase,
     LoadChatMessagesUseCase? loadChatMessagesUseCase,
     SendChatMessageUseCase? sendChatMessageUseCase,
     MarkChatConversationReadUseCase? markChatConversationReadUseCase,
   }) : _bootstrapChatConversationUseCase =
            bootstrapChatConversationUseCase ??
            getIt<BootstrapChatConversationUseCase>(),
+       _loadChatConversationsUseCase =
+           loadChatConversationsUseCase ??
+           getIt<LoadChatConversationsUseCase>(),
        _loadChatMessagesUseCase =
            loadChatMessagesUseCase ?? getIt<LoadChatMessagesUseCase>(),
        _sendChatMessageUseCase =
@@ -39,9 +44,14 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
 
   final int? initialConversationId;
   final BootstrapChatConversationUseCase _bootstrapChatConversationUseCase;
+  final LoadChatConversationsUseCase _loadChatConversationsUseCase;
   final LoadChatMessagesUseCase _loadChatMessagesUseCase;
   final SendChatMessageUseCase _sendChatMessageUseCase;
   final MarkChatConversationReadUseCase _markChatConversationReadUseCase;
+
+  Future<void> retryOpen() async {
+    await _openInitialConversation();
+  }
 
   Future<void> _openInitialConversation() async {
     final conversationId = initialConversationId;
@@ -105,45 +115,57 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
 
     await bootstrapResult.fold(
       (failure) async {
-        emit(
-          state.copyWith(
-            status: FeedbackChatStatus.error,
-            errorMessage: failure.message,
-          ),
-        );
+        final openedFallback = await _openFirstAvailableConversation();
+        if (!openedFallback) {
+          emit(
+            state.copyWith(
+              status: FeedbackChatStatus.error,
+              errorMessage: failure.message,
+            ),
+          );
+        }
       },
       (conversation) async {
-        final messagesResult = await _loadChatMessagesUseCase(
-          conversationId: conversation.id,
-        );
-
-        await messagesResult.fold(
-          (failure) async {
+        if (conversation.id <= 0) {
+          final openedFallback = await _openFirstAvailableConversation();
+          if (!openedFallback) {
             emit(
               state.copyWith(
                 status: FeedbackChatStatus.error,
-                errorMessage: failure.message,
-                conversationId: conversation.id,
+                errorMessage: 'Unable to open chat right now.',
               ),
             );
-          },
-          (messages) async {
-            final mappedMessages = _mapMessages(messages);
+          }
+          return;
+        }
 
-            emit(
-              state.copyWith(
-                messages: mappedMessages,
-                status: FeedbackChatStatus.loaded,
-                clearErrorMessage: true,
-                conversationId: conversation.id,
-              ),
-            );
-
-            await _markAsRead(conversation.id, messages);
-          },
-        );
+        await _loadConversationMessages(conversation.id);
       },
     );
+  }
+
+  Future<bool> _openFirstAvailableConversation() async {
+    final conversationsResult = await _loadChatConversationsUseCase(
+      page: 1,
+      pageSize: 1,
+    );
+
+    return await conversationsResult.fold((_) async => false, (
+      conversations,
+    ) async {
+      if (conversations.isEmpty) {
+        return false;
+      }
+
+      final conversationId = conversations.first.id;
+      if (conversationId <= 0) {
+        return false;
+      }
+
+      await _loadConversationMessages(conversationId);
+      return state.conversationId == conversationId &&
+          state.status != FeedbackChatStatus.error;
+    });
   }
 
   Future<void> _markAsRead(
@@ -188,21 +210,25 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
     return next.id > current.id ? next : current;
   }
 
-  Future<void> sendText(String text) async {
+  Future<bool> sendText(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
-      return;
+      return false;
     }
 
-    final conversationId = state.conversationId;
+    var conversationId = state.conversationId;
     if (conversationId == null) {
-      emit(
-        state.copyWith(
-          status: FeedbackChatStatus.error,
-          errorMessage: 'Chat is not ready yet.',
-        ),
-      );
-      return;
+      await _bootstrapChat();
+      conversationId = state.conversationId;
+      if (conversationId == null) {
+        emit(
+          state.copyWith(
+            status: FeedbackChatStatus.error,
+            errorMessage: 'Chat is not ready yet.',
+          ),
+        );
+        return false;
+      }
     }
 
     emit(
@@ -217,7 +243,7 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
       text: trimmed,
     );
 
-    result.fold(
+    return result.fold(
       (failure) {
         emit(
           state.copyWith(
@@ -225,6 +251,7 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
             errorMessage: failure.message,
           ),
         );
+        return false;
       },
       (message) {
         final nextMessages = <ChatMessage>[
@@ -238,6 +265,7 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
             clearErrorMessage: true,
           ),
         );
+        return true;
       },
     );
   }

@@ -25,7 +25,7 @@ class DioApiConsumer implements ApiConsumer {
       receiveTimeout: const Duration(seconds: 20),
       sendTimeout: const Duration(seconds: 20),
       headers: _jsonHeaders,
-      validateStatus: (int? status) => status != null && status < 500,
+      validateStatus: (int? status) => status != null && status < 600,
     );
 
     _refreshDio.options = _refreshDio.options.copyWith(
@@ -34,7 +34,7 @@ class DioApiConsumer implements ApiConsumer {
       receiveTimeout: const Duration(seconds: 20),
       sendTimeout: const Duration(seconds: 20),
       headers: _jsonHeaders,
-      validateStatus: (int? status) => status != null && status < 500,
+      validateStatus: (int? status) => status != null && status < 600,
     );
 
     if (_dio.interceptors.whereType<AuthTokenInterceptor>().isEmpty) {

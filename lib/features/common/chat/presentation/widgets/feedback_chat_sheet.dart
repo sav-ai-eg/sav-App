@@ -10,10 +10,12 @@ import 'package:sav/features/common/chat/presentation/widgets/chat_input_bar.dar
 class FeedbackChatSheet extends StatelessWidget {
   final List<ChatMessage> messages;
   final TextEditingController controller;
-  final VoidCallback onSend;
+  final Future<void> Function() onSend;
   final VoidCallback onClose;
+  final VoidCallback onRetry;
   final bool isLoading;
   final bool isSending;
+  final String? errorMessage;
 
   const FeedbackChatSheet({
     super.key,
@@ -21,50 +23,42 @@ class FeedbackChatSheet extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onClose,
+    required this.onRetry,
     required this.isLoading,
     required this.isSending,
+    this.errorMessage,
   });
 
   @override
   Widget build(BuildContext context) {
     final adminNames = _extractAdminNames(messages);
-    final size = MediaQuery.sizeOf(context);
-    final availableHeight =
-        size.height - MediaQuery.paddingOf(context).top - 12.h;
-    final maxSheetHeight = availableHeight > 0 ? availableHeight : size.height;
-    final minSheetHeight = maxSheetHeight < 420.0 ? maxSheetHeight : 420.0;
-    final cappedMaxHeight = maxSheetHeight < 720.0 ? maxSheetHeight : 720.0;
-    final sheetHeight = (size.height * 0.75)
-        .clamp(minSheetHeight, cappedMaxHeight)
-        .toDouble();
+    final hasFatalError = errorMessage != null && messages.isEmpty;
 
     return Material(
-      color: Colors.transparent,
-      child: ClipRRect(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-        child: SizedBox(
-          height: sheetHeight,
-          width: double.infinity,
-          child: Column(
-            children: [
-              _ChatHeader(
-                onClose: onClose,
-                onOpenConversations: () {
-                  Navigator.of(context).pushNamed(Routes.chatConversationsView);
-                },
-                adminNames: adminNames,
-              ),
-              Expanded(
-                child: _MessagesArea(messages: messages, isLoading: isLoading),
-              ),
-              ChatInputBar(
-                controller: controller,
-                onSend: onSend,
-                enabled: !isSending && !isLoading,
-              ),
-            ],
+      color: AppColors.whiteColor,
+      child: Column(
+        children: [
+          _ChatHeader(
+            onClose: onClose,
+            onOpenConversations: () {
+              Navigator.of(context).pushNamed(Routes.chatConversationsView);
+            },
+            adminNames: adminNames,
           ),
-        ),
+          Expanded(
+            child: _MessagesArea(
+              messages: messages,
+              isLoading: isLoading,
+              errorMessage: errorMessage,
+              onRetry: onRetry,
+            ),
+          ),
+          ChatInputBar(
+            controller: controller,
+            onSend: onSend,
+            enabled: !isSending && !isLoading && !hasFatalError,
+          ),
+        ],
       ),
     );
   }
@@ -105,49 +99,42 @@ class _ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.whiteColor,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24.r),
-          topRight: Radius.circular(24.r),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.primaryColor.withValues(alpha: 0.08),
+            width: 1,
+          ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(20.w, 14.h, 16.w, 16.h),
+        padding: EdgeInsets.fromLTRB(12.w, 10.h, 16.w, 14.h),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 42.w,
-              height: 4.h,
-              decoration: BoxDecoration(
-                color: AppColors.lightGrayColor,
-                borderRadius: BorderRadius.circular(999.r),
-              ),
-            ),
-            SizedBox(height: 14.h),
             Row(
               children: [
+                _HeaderActionButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Back',
+                  onTap: onClose,
+                ),
+                SizedBox(width: 10.w),
                 const Expanded(child: _ChatHeaderTitle()),
+                SizedBox(width: 10.w),
                 _HeaderActionButton(
                   icon: Icons.forum_rounded,
-                  tooltip: 'Previous chats',
+                  tooltip: 'All conversations',
                   onTap: onOpenConversations,
-                ),
-                SizedBox(width: 8.w),
-                _HeaderActionButton(
-                  icon: Icons.close_rounded,
-                  tooltip: 'Close chat',
-                  onTap: onClose,
                   filled: true,
                 ),
               ],
@@ -178,6 +165,40 @@ class _ChatHeader extends StatelessWidget {
   }
 }
 
+class _ChatHeaderTitle extends StatelessWidget {
+  const _ChatHeaderTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Admin Support',
+          style: GoogleFonts.inter(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w700,
+            color: AppColors.darkNavy,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        SizedBox(height: 3.h),
+        Text(
+          'We will keep this conversation in sync.',
+          style: GoogleFonts.inter(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w500,
+            color: AppColors.subtitleGray,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
 class _AdminChip extends StatelessWidget {
   final String name;
 
@@ -189,10 +210,10 @@ class _AdminChip extends StatelessWidget {
       constraints: BoxConstraints(maxWidth: 180.w),
       padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
       decoration: BoxDecoration(
-        color: AppColors.primaryColor.withValues(alpha: 0.12),
+        color: AppColors.primaryColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999.r),
         border: Border.all(
-          color: AppColors.primaryColor.withValues(alpha: 0.25),
+          color: AppColors.primaryColor.withValues(alpha: 0.18),
           width: 1,
         ),
       ),
@@ -236,45 +257,18 @@ class _AdminChip extends StatelessWidget {
   }
 }
 
-class _ChatHeaderTitle extends StatelessWidget {
-  const _ChatHeaderTitle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Chat with Admin',
-          style: GoogleFonts.inter(
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w700,
-            color: AppColors.darkNavy,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        SizedBox(height: 4.h),
-        Text(
-          'Get help and support',
-          style: GoogleFonts.inter(
-            fontSize: 13.sp,
-            fontWeight: FontWeight.w400,
-            color: AppColors.grayColor,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
-}
-
 class _MessagesArea extends StatelessWidget {
   final List<ChatMessage> messages;
   final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback onRetry;
 
-  const _MessagesArea({required this.messages, required this.isLoading});
+  const _MessagesArea({
+    required this.messages,
+    required this.isLoading,
+    required this.errorMessage,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -282,12 +276,17 @@ class _MessagesArea extends StatelessWidget {
       return const _LoadingMessagesState();
     }
 
+    final message = errorMessage;
+    if (message != null && messages.isEmpty) {
+      return _ChatErrorState(message: message, onRetry: onRetry);
+    }
+
     if (messages.isEmpty) {
       return const _EmptyMessagesState();
     }
 
     return ColoredBox(
-      color: AppColors.scaffoldColor,
+      color: AppColors.whiteColor,
       child: _MessageList(messages: messages),
     );
   }
@@ -302,7 +301,7 @@ class _MessageList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.builder(
       reverse: true,
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
       physics: const BouncingScrollPhysics(),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       cacheExtent: 900,
@@ -328,8 +327,83 @@ class _LoadingMessagesState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const ColoredBox(
-      color: AppColors.scaffoldColor,
+      color: AppColors.whiteColor,
       child: Center(child: CircularProgressIndicator.adaptive()),
+    );
+  }
+}
+
+class _ChatErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ChatErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.whiteColor,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 28.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 68.w,
+                height: 68.w,
+                decoration: BoxDecoration(
+                  color: AppColors.errorColor.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.wifi_off_rounded,
+                  color: AppColors.errorColor,
+                  size: 30.sp,
+                ),
+              ),
+              SizedBox(height: 18.h),
+              Text(
+                'Chat could not open',
+                style: GoogleFonts.inter(
+                  fontSize: 17.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.darkNavy,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8.h),
+              Text(
+                message,
+                style: GoogleFonts.inter(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.subtitleGray,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 18.h),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryColor,
+                  foregroundColor: AppColors.whiteColor,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 18.w,
+                    vertical: 12.h,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -340,35 +414,37 @@ class _EmptyMessagesState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.scaffoldColor,
+      color: AppColors.whiteColor,
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const _EmptyMessagesIcon(),
-            SizedBox(height: 16.h),
-            Text(
-              'No messages yet',
-              style: GoogleFonts.inter(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkNavy,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 28.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const _EmptyMessagesIcon(),
+              SizedBox(height: 16.h),
+              Text(
+                'No messages yet',
+                style: GoogleFonts.inter(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.darkNavy,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              'Start a conversation with admin',
-              style: GoogleFonts.inter(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w400,
-                color: AppColors.grayColor,
+              SizedBox(height: 8.h),
+              Text(
+                'Send your first message and the admin team will see it here.',
+                style: GoogleFonts.inter(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.subtitleGray,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -384,13 +460,13 @@ class _EmptyMessagesIcon extends StatelessWidget {
       width: 64.w,
       height: 64.w,
       decoration: BoxDecoration(
-        color: AppColors.primaryColor.withValues(alpha: 0.1),
+        color: AppColors.primaryColor.withValues(alpha: 0.08),
         shape: BoxShape.circle,
       ),
       child: Icon(
-        Icons.mail_outline_rounded,
+        Icons.mark_chat_unread_outlined,
         color: AppColors.primaryColor,
-        size: 32.sp,
+        size: 30.sp,
       ),
     );
   }
@@ -419,12 +495,19 @@ class _HeaderActionButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12.r),
           child: Container(
-            width: 40.w,
-            height: 40.w,
+            width: 42.w,
+            height: 42.w,
             decoration: BoxDecoration(
-              color: filled ? AppColors.scaffoldColor : AppColors.whiteColor,
+              color: filled
+                  ? AppColors.primaryColor.withValues(alpha: 0.08)
+                  : AppColors.whiteColor,
               borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(color: AppColors.lightGrayColor, width: 1),
+              border: Border.all(
+                color: filled
+                    ? AppColors.primaryColor.withValues(alpha: 0.18)
+                    : AppColors.lightGrayColor,
+                width: 1,
+              ),
             ),
             child: Icon(icon, color: AppColors.darkNavy, size: 20.sp),
           ),

@@ -23,7 +23,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       );
 
       if (_isSuccess(response.statusCode)) {
-        return ChatConversationModel.fromBackendMap(response.data);
+        final payload = _extractObject(
+          response.rawData,
+          response.data,
+          keys: const <String>['conversation', 'data', 'result'],
+        );
+        if (payload != null) {
+          return ChatConversationModel.fromBackendMap(payload);
+        }
       }
 
       throw ServerException(
@@ -51,7 +58,8 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
         queryParameters: <String, dynamic>{
           'page': page,
           'page_size': pageSize,
-          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
         },
       );
 
@@ -84,10 +92,7 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     try {
       final response = await _apiConsumer.get(
         ApiEndpoints.chatConversationMessages(conversationId),
-        queryParameters: <String, dynamic>{
-          'page': page,
-          'page_size': pageSize,
-        },
+        queryParameters: <String, dynamic>{'page': page, 'page_size': pageSize},
       );
 
       if (!_isSuccess(response.statusCode)) {
@@ -122,7 +127,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       );
 
       if (response.statusCode == 201 || _isSuccess(response.statusCode)) {
-        return ChatMessageModel.fromBackendMap(response.data);
+        final payload = _extractObject(
+          response.rawData,
+          response.data,
+          keys: const <String>['message', 'data', 'result'],
+        );
+        if (payload != null) {
+          return ChatMessageModel.fromBackendMap(payload);
+        }
       }
 
       throw ServerException(
@@ -150,7 +162,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       );
 
       if (_isSuccess(response.statusCode)) {
-        return ChatReadReceiptModel.fromBackendMap(response.data);
+        final payload = _extractObject(
+          response.rawData,
+          response.data,
+          keys: const <String>['receipt', 'read_receipt', 'data', 'result'],
+        );
+        if (payload != null) {
+          return ChatReadReceiptModel.fromBackendMap(payload);
+        }
       }
 
       throw ServerException(
@@ -171,7 +190,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     try {
       final response = await _apiConsumer.get(ApiEndpoints.chatUnreadSummary);
       if (_isSuccess(response.statusCode)) {
-        return ChatUnreadSummaryModel.fromBackendMap(response.data);
+        final payload = _extractObject(
+          response.rawData,
+          response.data,
+          keys: const <String>['summary', 'data', 'result'],
+        );
+        if (payload != null) {
+          return ChatUnreadSummaryModel.fromBackendMap(payload);
+        }
       }
 
       throw ServerException(
@@ -191,16 +217,98 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     return statusCode >= 200 && statusCode < 300;
   }
 
-  List<dynamic> _extractItems(dynamic rawData, Map<String, dynamic> fallbackData) {
-    if (rawData is List) {
-      return rawData;
+  List<dynamic> _extractItems(
+    dynamic rawData,
+    Map<String, dynamic> fallbackData,
+  ) {
+    return _readItems(rawData) ?? _readItems(fallbackData) ?? const <dynamic>[];
+  }
+
+  List<dynamic>? _readItems(dynamic value) {
+    if (value is List) {
+      return value;
     }
 
-    if (fallbackData['results'] is List) {
-      return fallbackData['results'] as List<dynamic>;
+    if (value is Map<String, dynamic>) {
+      return _readItemsFromMap(value);
     }
 
-    return const <dynamic>[];
+    if (value is Map) {
+      return _readItemsFromMap(Map<String, dynamic>.from(value));
+    }
+
+    return null;
+  }
+
+  List<dynamic>? _readItemsFromMap(Map<String, dynamic> map) {
+    for (final key in const <String>[
+      'results',
+      'items',
+      'conversations',
+      'messages',
+      'data',
+    ]) {
+      final nestedItems = _readItems(map[key]);
+      if (nestedItems != null) {
+        return nestedItems;
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _extractObject(
+    dynamic rawData,
+    Map<String, dynamic> fallbackData, {
+    required List<String> keys,
+  }) {
+    return _readObject(rawData, keys: keys) ??
+        _readObject(fallbackData, keys: keys);
+  }
+
+  Map<String, dynamic>? _readObject(
+    dynamic value, {
+    required List<String> keys,
+  }) {
+    if (value is Map<String, dynamic>) {
+      return _readObjectFromMap(value, keys: keys);
+    }
+
+    if (value is Map) {
+      return _readObjectFromMap(Map<String, dynamic>.from(value), keys: keys);
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _readObjectFromMap(
+    Map<String, dynamic> map, {
+    required List<String> keys,
+  }) {
+    for (final key in keys) {
+      final nested = map[key];
+      if (nested is Map<String, dynamic>) {
+        return nested;
+      }
+      if (nested is Map) {
+        return Map<String, dynamic>.from(nested);
+      }
+    }
+
+    for (final key in const <String>['payload', 'data', 'result']) {
+      final nested = map[key];
+      if (nested is Map<String, dynamic>) {
+        final unwrapped = _readObjectFromMap(nested, keys: keys);
+        return unwrapped ?? nested;
+      }
+      if (nested is Map) {
+        final nestedMap = Map<String, dynamic>.from(nested);
+        final unwrapped = _readObjectFromMap(nestedMap, keys: keys);
+        return unwrapped ?? nestedMap;
+      }
+    }
+
+    return map.isEmpty ? null : map;
   }
 
   String _extractErrorMessage(

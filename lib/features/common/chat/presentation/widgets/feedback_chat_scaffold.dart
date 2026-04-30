@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/features/common/chat/data/models/chat_message.dart';
@@ -7,16 +5,20 @@ import 'package:sav/features/common/chat/presentation/widgets/feedback_chat_shee
 
 class FeedbackChatScaffold extends StatefulWidget {
   final List<ChatMessage> messages;
-  final ValueChanged<String> onSendText;
+  final Future<bool> Function(String text) onSendText;
+  final VoidCallback onRetry;
   final bool isLoading;
   final bool isSending;
+  final String? errorMessage;
 
   const FeedbackChatScaffold({
     super.key,
     required this.messages,
     required this.onSendText,
+    required this.onRetry,
     required this.isLoading,
     required this.isSending,
+    this.errorMessage,
   });
 
   @override
@@ -32,12 +34,17 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
     super.dispose();
   }
 
-  void _handleSend() {
+  Future<void> _handleSend() async {
     final text = _controller.text.trim();
     if (text.isEmpty) {
       return;
     }
-    widget.onSendText(text);
+
+    final didSend = await widget.onSendText(text);
+    if (!mounted || !didSend) {
+      return;
+    }
+
     _controller.clear();
   }
 
@@ -48,40 +55,19 @@ class _FeedbackChatScaffoldState extends State<FeedbackChatScaffold> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Positioned.fill(child: Container(color: AppColors.scaffoldColor)),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-              child: Container(
-                color: AppColors.darkNavy.withValues(alpha: 0.4),
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: SafeArea(
-                top: false,
-                child: FeedbackChatSheet(
-                  messages: widget.messages,
-                  controller: _controller,
-                  onSend: _handleSend,
-                  onClose: _handleClose,
-                  isLoading: widget.isLoading,
-                  isSending: widget.isSending,
-                ),
-              ),
-            ),
-          ),
-        ],
+      backgroundColor: AppColors.whiteColor,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        child: FeedbackChatSheet(
+          messages: widget.messages,
+          controller: _controller,
+          onSend: _handleSend,
+          onClose: _handleClose,
+          onRetry: widget.onRetry,
+          isLoading: widget.isLoading,
+          isSending: widget.isSending,
+          errorMessage: widget.errorMessage,
+        ),
       ),
     );
   }
