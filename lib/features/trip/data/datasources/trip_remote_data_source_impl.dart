@@ -4,6 +4,8 @@ import 'package:sav/core/constants/api_endpoints.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/network/api_consumer.dart';
 import 'package:sav/features/trip/data/datasources/trip_remote_data_source.dart';
+import 'package:sav/features/trip/data/models/esp_telemetry_log_model.dart';
+import 'package:sav/features/trip/data/models/esp_telemetry_stats_model.dart';
 import 'package:sav/features/trip/data/models/trip_event_model.dart';
 import 'package:sav/features/trip/data/models/trip_model.dart';
 
@@ -302,6 +304,109 @@ class TripRemoteDataSourceImpl implements TripRemoteDataSource {
         _extractErrorMessage(
           response.data,
           fallback: 'Unable to sync alert to server.',
+        ),
+      );
+    } on AppException {
+      rethrow;
+    } catch (_) {
+      throw const UnknownException();
+    }
+  }
+
+  @override
+  Future<List<EspTelemetryLogModel>> loadEspTelemetry({
+    int page = 1,
+    int pageSize = 1,
+    int? tripId,
+    String? deviceUid,
+    bool? alertOnly,
+  }) async {
+    try {
+      final query = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
+
+      if (tripId != null && tripId > 0) {
+        query['trip_id'] = tripId;
+      }
+
+      final normalizedDevice = (deviceUid ?? '').trim();
+      if (normalizedDevice.isNotEmpty) {
+        query['device_uid'] = normalizedDevice;
+      }
+
+      if (alertOnly != null) {
+        query['alert_only'] = alertOnly;
+      }
+
+      final response = await _apiConsumer.get(
+        ApiEndpoints.espTelemetry,
+        queryParameters: query,
+      );
+
+      if (!_isSuccess(response.statusCode)) {
+        throw ServerException(
+          _extractErrorMessage(
+            response.data,
+            fallback: 'Unable to load ESP telemetry right now.',
+          ),
+        );
+      }
+
+      final raw = response.rawData;
+      if (raw is List) {
+        return raw
+            .whereType<Map<String, dynamic>>()
+            .map(EspTelemetryLogModel.fromMap)
+            .toList();
+      }
+
+      if (response.data['results'] is List) {
+        return (response.data['results'] as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .map(EspTelemetryLogModel.fromMap)
+            .toList();
+      }
+
+      return const <EspTelemetryLogModel>[];
+    } on AppException {
+      rethrow;
+    } catch (_) {
+      throw const UnknownException();
+    }
+  }
+
+  @override
+  Future<EspTelemetryStatsModel> loadEspTelemetryStats({
+    int? tripId,
+    String? deviceUid,
+  }) async {
+    try {
+      final query = <String, dynamic>{};
+
+      if (tripId != null && tripId > 0) {
+        query['trip_id'] = tripId;
+      }
+
+      final normalizedDevice = (deviceUid ?? '').trim();
+      if (normalizedDevice.isNotEmpty) {
+        query['device_uid'] = normalizedDevice;
+      }
+
+      final response = await _apiConsumer.get(
+        ApiEndpoints.espTelemetryStats,
+        queryParameters: query,
+      );
+
+      if (_isSuccess(response.statusCode)) {
+        return EspTelemetryStatsModel.fromMap(response.data);
+      }
+
+      throw ServerException(
+        _extractErrorMessage(
+          response.data,
+          fallback: 'Unable to load ESP telemetry stats right now.',
         ),
       );
     } on AppException {

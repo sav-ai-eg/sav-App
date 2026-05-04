@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -201,13 +200,8 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                     runSpacing: 8.h,
                     children: [
                       _MiniIndicator(
-                        icon: Icons.videocam_rounded,
-                        label: 'Cam',
-                        active: state.isCameraReady,
-                      ),
-                      _MiniIndicator(
-                        icon: Icons.psychology_rounded,
-                        label: 'AI',
+                        icon: Icons.sensors_rounded,
+                        label: 'ESP',
                         active: state.isAiReady,
                       ),
                       _MiniIndicator(
@@ -310,6 +304,18 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
           AnimatedBuilder(
             animation: _alertOpacity,
             builder: (context, child) {
+              final alertType = widget.dangerAlert!.alertType;
+              final isDrowsy =
+                  alertType == 'drowsiness' || alertType == 'eyes_closed';
+              final isNoFace = alertType == 'no_face';
+              final icon = isNoFace
+                  ? Icons.face_retouching_off_rounded
+                  : (isDrowsy
+                      ? Icons.visibility_off_rounded
+                      : Icons.mood_bad_rounded);
+              final title = isNoFace
+                  ? 'Face not detected'
+                  : (isDrowsy ? 'Drowsiness detected' : 'Yawning detected');
               return IgnorePointer(
                 child: Container(
                   color: AppColors.errorColor.withValues(
@@ -331,17 +337,13 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  widget.dangerAlert!.alertType == 'drowsiness'
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.mood_bad_rounded,
+                                  icon,
                                   size: 42.sp,
                                   color: AppColors.errorColor,
                                 ),
                                 SizedBox(height: 10.h),
                                 Text(
-                                  widget.dangerAlert!.alertType == 'drowsiness'
-                                      ? 'Drowsiness detected'
-                                      : 'Yawning detected',
+                                  title,
                                   style: GoogleFonts.inter(
                                     fontSize: 18.sp,
                                     fontWeight: FontWeight.w800,
@@ -1028,8 +1030,6 @@ class _ActiveTripPanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SizedBox(width: 12.w),
-                  const _CameraPreviewCard(),
                 ],
               ),
               SizedBox(height: 18.h),
@@ -1714,32 +1714,3 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-class _CameraPreviewCard extends StatelessWidget {
-  const _CameraPreviewCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final cameraService = context.read<TripCubit>().cameraService;
-
-    return Container(
-      width: 96.w,
-      height: 118.h,
-      decoration: BoxDecoration(
-        color: AppColors.darkNavy,
-        borderRadius: BorderRadius.circular(22.r),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22.r),
-        child: cameraService.isInitialized && cameraService.controller != null
-            ? CameraPreview(cameraService.controller!)
-            : Center(
-                child: Icon(
-                  Icons.videocam_off_rounded,
-                  size: 24.sp,
-                  color: Colors.white60,
-                ),
-              ),
-      ),
-    );
-  }
-}

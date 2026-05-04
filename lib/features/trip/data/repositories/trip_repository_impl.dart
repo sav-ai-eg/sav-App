@@ -3,6 +3,8 @@ import 'package:injectable/injectable.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/features/trip/data/datasources/trip_remote_data_source.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
 import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
@@ -239,6 +241,52 @@ class TripRepositoryImpl implements TripRepository {
     } catch (_) {
       return const Left<Failure, Unit>(
         ApiFailure('Unable to sync trip alert right now.'),
+      );
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<EspTelemetryLogEntity>>> loadEspTelemetry({
+    int page = 1,
+    int pageSize = 1,
+    int? tripId,
+    String? deviceUid,
+    bool? alertOnly,
+  }) async {
+    try {
+      final logs = await _remoteDataSource.loadEspTelemetry(
+        page: page,
+        pageSize: pageSize,
+        tripId: tripId,
+        deviceUid: deviceUid,
+        alertOnly: alertOnly,
+      );
+      return Right<Failure, List<EspTelemetryLogEntity>>(logs);
+    } on AppException catch (exception) {
+      return Left<Failure, List<EspTelemetryLogEntity>>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, List<EspTelemetryLogEntity>>(
+        ApiFailure('Unable to load ESP telemetry right now.'),
+      );
+    }
+  }
+
+  @override
+  Future<Either<Failure, EspTelemetryStatsEntity>> loadEspTelemetryStats({
+    int? tripId,
+    String? deviceUid,
+  }) async {
+    try {
+      final stats = await _remoteDataSource.loadEspTelemetryStats(
+        tripId: tripId,
+        deviceUid: deviceUid,
+      );
+      return Right<Failure, EspTelemetryStatsEntity>(stats);
+    } on AppException catch (exception) {
+      return Left<Failure, EspTelemetryStatsEntity>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, EspTelemetryStatsEntity>(
+        ApiFailure('Unable to load ESP telemetry stats right now.'),
       );
     }
   }

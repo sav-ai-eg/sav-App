@@ -44,6 +44,9 @@ import 'package:sav/features/home/domain/repositories/home_repository.dart';
 import 'package:sav/features/home/domain/usecases/load_home_dashboard_use_case.dart';
 import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_case.dart';
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
+import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_stats_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_use_case.dart';
 
 final getIt = GetIt.instance;
 @InjectableInit()
@@ -165,6 +168,16 @@ Future<void> configureDependencies() async {
   if (!getIt.isRegistered<BackendApiService>()) {
     getIt.registerLazySingleton<BackendApiService>(
       () => BackendApiService(apiConsumer: getIt<ApiConsumer>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadEspTelemetryUseCase>()) {
+    getIt.registerLazySingleton<LoadEspTelemetryUseCase>(
+      () => LoadEspTelemetryUseCase(getIt<TripRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadEspTelemetryStatsUseCase>()) {
+    getIt.registerLazySingleton<LoadEspTelemetryStatsUseCase>(
+      () => LoadEspTelemetryStatsUseCase(getIt<TripRepository>()),
     );
   }
   if (!getIt.isRegistered<ChatRemoteDataSource>()) {

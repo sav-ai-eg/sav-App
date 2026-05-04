@@ -7,6 +7,7 @@ import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/di/injection.dart';
 import 'package:sav/core/services/auth_session_storage.dart';
+import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/permission_service.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/core/util/extensions/navigation.dart';
@@ -32,6 +33,7 @@ class SettingsView extends StatelessWidget {
     return BlocProvider(
       create: (_) => SettingsCubit(
         getIt<FirestoreService>(),
+        getIt<BackendApiService>(),
         getIt<SharedPreferences>(),
         getIt<LogoutUseCase>(),
         getIt<AuthSessionStorage>(),
@@ -202,7 +204,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
           fontWeight: FontWeight.w500,
         ),
         SizedBox(height: 8.h),
-        VehicleInfoCard(driver: driver),
+        VehicleInfoCard(driver: driver, vehicle: state.vehicle),
         SizedBox(height: 16.h),
 
         SettingsSectionHeader(
@@ -230,7 +232,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
         SettingsListCard(
           items: [
             SettingsItem(
-              title: 'Trip Settings',
+              title: 'Telemetry Settings',
               onTap: () => _showTripSettingsSheet(state),
             ),
             SettingsItem(
@@ -257,7 +259,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
               },
             ),
             SettingsItem(
-              title: 'Device & Camera',
+              title: 'Device Status',
               onTap: () => _showDeviceStatusSheet(state),
             ),
             SettingsItem(
@@ -325,7 +327,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Trip Detection Interval',
+                    'Telemetry Refresh Interval',
                     style: GoogleFonts.inter(
                       fontSize: 18.sp,
                       fontWeight: FontWeight.w600,
@@ -333,7 +335,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                   ),
                   SizedBox(height: 6.h),
                   Text(
-                    'Choose how often SAV analyzes camera frames during driving.',
+                    'Choose how often SAV refreshes ESP telemetry during driving.',
                     style: GoogleFonts.inter(
                       fontSize: 13.sp,
                       color: AppColors.grayColor,
@@ -379,8 +381,8 @@ class _SettingsBodyState extends State<_SettingsBody> {
                   SizedBox(height: 10.h),
                   Text(
                     selectedInterval <= 1000
-                        ? 'Faster detection, higher battery usage.'
-                        : 'Balanced performance and battery usage.',
+                      ? 'Faster refresh, higher battery usage.'
+                      : 'Balanced performance and battery usage.',
                     style: GoogleFonts.inter(
                       fontSize: 12.sp,
                       color: AppColors.grayColor,
@@ -404,7 +406,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                         }
                         SavDialog.showSuccess(
                           context,
-                          'Detection interval updated to $selectedInterval ms.',
+                          'Telemetry refresh updated to $selectedInterval ms.',
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -517,7 +519,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Device & Camera Status',
+                'Device Status',
                 style: GoogleFonts.inter(
                   fontSize: 18.sp,
                   fontWeight: FontWeight.w600,
@@ -529,13 +531,6 @@ class _SettingsBodyState extends State<_SettingsBody> {
                 granted: state.hasValidSession,
                 grantedLabel: 'Active',
                 deniedLabel: 'Expired',
-              ),
-              SizedBox(height: 8.h),
-              _StatusRow(
-                title: 'Camera Permission',
-                granted: state.cameraPermissionGranted,
-                grantedLabel: 'Granted',
-                deniedLabel: 'Missing',
               ),
               SizedBox(height: 8.h),
               _StatusRow(
@@ -589,7 +584,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
   }
 
   Future<void> _requestPermissions() async {
-    final result = await PermissionService.requestAll(context);
+    final locationGranted = await PermissionService.requestLocation(context);
     if (!mounted) {
       return;
     }
@@ -600,12 +595,12 @@ class _SettingsBodyState extends State<_SettingsBody> {
       return;
     }
 
-    if (result.camera && result.location) {
-      SavDialog.showSuccess(context, 'All required permissions are granted.');
+    if (locationGranted) {
+      SavDialog.showSuccess(context, 'Location permission is granted.');
     } else {
       SavDialog.showError(
         context,
-        'Camera and location permissions are required for safe trip tracking.',
+        'Location permission is required for safe trip tracking.',
       );
     }
   }
@@ -1014,7 +1009,7 @@ class _PreferencesCard extends StatelessWidget {
                   SizedBox(width: 8.w),
                   Expanded(
                     child: Text(
-                      'Detection interval: $detectionIntervalMs ms',
+                      'Telemetry refresh: $detectionIntervalMs ms',
                       style: GoogleFonts.inter(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w500,

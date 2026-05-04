@@ -129,6 +129,34 @@ class BackendApiService {
     return items;
   }
 
+  Future<Map<String, dynamic>?> fetchAssignedVehicle({
+    int pageSize = 1,
+  }) async {
+    try {
+      final response = await _apiConsumer.get(
+        ApiEndpoints.vehicles,
+        queryParameters: <String, dynamic>{
+          'page': 1,
+          'page_size': pageSize,
+        },
+      );
+
+      final payload = response.data;
+      if (_isSuccess(response.statusCode)) {
+        return _extractVehicleItem(response.rawData, payload);
+      }
+
+      throw Exception(
+        _extractErrorMessage(
+          payload,
+          fallback: 'Failed to load vehicle info.',
+        ),
+      );
+    } on AppException catch (exception) {
+      throw Exception(exception.message);
+    }
+  }
+
   bool _isSuccess(int statusCode) {
     return statusCode >= 200 && statusCode < 300;
   }
@@ -224,6 +252,33 @@ class BackendApiService {
         }
       }
       return null;
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _extractVehicleItem(
+    dynamic raw,
+    Map<String, dynamic> payload,
+  ) {
+    if (raw is List) {
+      final list = raw.whereType<Map<String, dynamic>>().toList();
+      if (list.isNotEmpty) {
+        return list.first;
+      }
+      return null;
+    }
+
+    final results = payload['results'];
+    if (results is List) {
+      final list = results.whereType<Map<String, dynamic>>().toList();
+      if (list.isNotEmpty) {
+        return list.first;
+      }
+    }
+
+    if (payload.containsKey('id')) {
+      return payload;
     }
 
     return null;

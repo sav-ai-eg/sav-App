@@ -8,15 +8,17 @@ import 'package:injectable/injectable.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/core/services/alert_service.dart';
-import 'package:sav/core/services/camera_service.dart';
 import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
-import 'package:sav/core/services/tflite_detection_service.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_stats_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/cancel_trip_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/create_trip_alert_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/finish_trip_use_case.dart';
@@ -42,8 +44,6 @@ class TripCubit extends Cubit<TripState> {
     this._cancelTripUseCase,
     this._loadTripEventsUseCase,
     this._createTripAlertUseCase,
-    this._detectionService,
-    this._cameraService,
     this._locationService,
     this._alertService,
     this._offlineCache,
@@ -62,9 +62,6 @@ class TripCubit extends Cubit<TripState> {
   final CancelTripUseCase _cancelTripUseCase;
   final LoadTripEventsUseCase _loadTripEventsUseCase;
   final CreateTripAlertUseCase _createTripAlertUseCase;
-
-  final TfliteDetectionService _detectionService;
-  final CameraService _cameraService;
   final LocationService _locationService;
   final AlertService _alertService;
   final OfflineCacheService _offlineCache;
@@ -75,23 +72,36 @@ class TripCubit extends Cubit<TripState> {
       ? GetIt.instance<TripLiveUpdatesService>()
       : null;
 
+  LoadEspTelemetryUseCase? get _loadEspTelemetryUseCase =>
+      GetIt.instance.isRegistered<LoadEspTelemetryUseCase>()
+      ? GetIt.instance<LoadEspTelemetryUseCase>()
+      : null;
+
+  LoadEspTelemetryStatsUseCase? get _loadEspTelemetryStatsUseCase =>
+      GetIt.instance.isRegistered<LoadEspTelemetryStatsUseCase>()
+      ? GetIt.instance<LoadEspTelemetryStatsUseCase>()
+      : null;
+
   TripEntity? _activeTrip;
-  Timer? _detectionTimer;
+  Timer? _telemetryTimer;
+  Timer? _telemetryStatsTimer;
   Timer? _locationUpdateTimer;
-  bool _isDetecting = false;
+  bool _isPollingTelemetry = false;
   bool _isTransitioning = false;
 
-  int _totalFrames = 0;
-  int _safeFrames = 0;
+  bool _isTelemetryReady = false;
+  int? _lastTelemetryId;
+  DateTime? _lastTelemetryAt;
+
   int _alertCount = 0;
   int _drowsinessAlerts = 0;
   int _distractionAlerts = 0;
+  double _awakePercentage = 100.0;
   double _totalDistanceMeters = 0;
   Position? _lastPosition;
   DateTime? _lastAlertTime;
 
   TripEntity? get activeTrip => _activeTrip;
-  CameraService get cameraService => _cameraService;
 
   TripActive? get activeSnapshot =>
       _activeTrip == null ? null : _buildActiveState();
@@ -255,7 +265,8 @@ class TripCubit extends Cubit<TripState> {
       },
       (updatedTrip) {
         _activeTrip = updatedTrip;
-        _detectionTimer?.cancel();
+        _telemetryTimer?.cancel();
+        _telemetryStatsTimer?.cancel();
         _tripLiveUpdates?.emit(
           type: TripLiveUpdateType.paused,
           tripId: updatedTrip.tripIdOrZero,
@@ -298,9 +309,8 @@ class TripCubit extends Cubit<TripState> {
       },
       (updatedTrip) {
         _activeTrip = updatedTrip;
-        if (_cameraService.isInitialized && _detectionService.isInitialized) {
-          _startDetectionLoop();
-        }
+        _startTelemetryLoop();
+        _startTelemetryStatsLoop();
         _tripLiveUpdates?.emit(
           type: TripLiveUpdateType.resumed,
           tripId: updatedTrip.tripIdOrZero,
@@ -379,28 +389,7 @@ class TripCubit extends Cubit<TripState> {
       return;
     }
 
-    var cameraReady = false;
-    var aiReady = false;
     Position? position;
-
-    try {
-      _emitLoadingStep('Starting camera...');
-      cameraReady = await _cameraService.initialize();
-    } catch (error) {
-      debugPrint('Trip camera init failed: $error');
-      cameraReady = false;
-    }
-
-    try {
-      _emitLoadingStep('Loading AI...');
-      aiReady = _detectionService.isInitialized;
-      if (!aiReady && cameraReady) {
-        aiReady = await _detectionService.initialize();
-      }
-    } catch (error) {
-      debugPrint('Trip AI init failed: $error');
-      aiReady = false;
-    }
 
     try {
       _emitLoadingStep('Getting location...');
@@ -428,11 +417,10 @@ class TripCubit extends Cubit<TripState> {
     emit(
       TripActive(
         trip: _activeTrip!,
-        detectionStatus: cameraReady && aiReady
-            ? DetectionStatus.safe
+        detectionStatus: _connectivity.isOnline
+            ? DetectionStatus.initializing
             : DetectionStatus.offline,
-        isAiReady: aiReady,
-        isCameraReady: cameraReady,
+        isAiReady: _isTelemetryReady,
         isOnline: _connectivity.isOnline,
         pendingSyncCount: _offlineCache.totalPendingCount,
         latitude: latitude,
@@ -440,8 +428,9 @@ class TripCubit extends Cubit<TripState> {
       ),
     );
 
-    if (cameraReady && aiReady && (_activeTrip?.isStarted ?? false)) {
-      _startDetectionLoop();
+    if (_activeTrip?.isStarted ?? false) {
+      _startTelemetryLoop();
+      _startTelemetryStatsLoop();
     }
 
     _startLocationTracking();
@@ -457,118 +446,258 @@ class TripCubit extends Cubit<TripState> {
   }
 
   void _resetCounters() {
-    _totalFrames = 0;
-    _safeFrames = 0;
     _alertCount = 0;
     _drowsinessAlerts = 0;
     _distractionAlerts = 0;
+    _awakePercentage = 100.0;
     _totalDistanceMeters = 0;
     _lastPosition = null;
     _lastAlertTime = null;
-    _isDetecting = false;
+    _isPollingTelemetry = false;
+    _isTelemetryReady = false;
+    _lastTelemetryId = null;
+    _lastTelemetryAt = null;
     _isTransitioning = false;
   }
 
-  void _startDetectionLoop() {
-    _detectionTimer?.cancel();
-    _detectionTimer = Timer.periodic(
-      const Duration(milliseconds: AppConstants.detectionIntervalMs),
-      (_) => _runDetection(),
+  void _startTelemetryLoop() {
+    _telemetryTimer?.cancel();
+    _telemetryTimer = Timer.periodic(
+      Duration(milliseconds: AppConstants.detectionIntervalMs),
+      (_) => _pollTelemetryLatest(),
     );
   }
 
-  Future<void> _runDetection() async {
-    if (_isDetecting ||
+  void _startTelemetryStatsLoop() {
+    _telemetryStatsTimer?.cancel();
+    _telemetryStatsTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _pollTelemetryStats(),
+    );
+  }
+
+  Future<void> _pollTelemetryLatest() async {
+    if (_isPollingTelemetry ||
         _activeTrip == null ||
         !_activeTrip!.isStarted ||
-        !_cameraService.isInitialized ||
-        !_detectionService.isInitialized) {
+        !_connectivity.isOnline) {
+      if (!_connectivity.isOnline && _activeTrip != null) {
+        _updateActiveState(
+          detectionStatus: DetectionStatus.offline,
+          isAiReady: false,
+        );
+      }
       return;
     }
 
-    _isDetecting = true;
+    _isPollingTelemetry = true;
 
     try {
-      final frame = await _cameraService.captureFrame();
-      if (frame == null) {
+      final useCase = _loadEspTelemetryUseCase;
+      if (useCase == null) {
         return;
       }
 
-      final result = await _detectionService.detectFrame(frame);
-      _totalFrames++;
+      final result = await useCase(
+        page: 1,
+        pageSize: 1,
+        tripId: _activeTrip!.tripIdOrZero,
+      );
 
-      if (result == null) {
-        return;
-      }
-
-      if (result.isDanger) {
-        final now = DateTime.now();
-        final canAlert =
-            _lastAlertTime == null ||
-            now.difference(_lastAlertTime!).inMilliseconds >=
-                AppConstants.alertCooldownMs;
-
-        if (!canAlert) {
-          return;
-        }
-
-        _lastAlertTime = now;
-        _alertCount++;
-
-        if (result.isDrowsy) {
-          _drowsinessAlerts++;
-          _alertService.playDrowsinessAlert();
-        } else if (result.isYawning) {
-          _distractionAlerts++;
-          _alertService.playYawnWarning();
-        }
-
-        await _saveAlert(result.alertType);
-
-        final activeState = _buildActiveState(
-          detectionStatus: result.isDrowsy
-              ? DetectionStatus.drowsy
-              : DetectionStatus.yawning,
-          isAiReady: true,
-          isCameraReady: true,
-        );
-
-        emit(
-          TripDangerAlert(
-            alertType: result.alertType,
-            confidence: result.maxConfidence,
-            activeState: activeState,
-          ),
-        );
-
-        Future<void>.delayed(const Duration(seconds: 3), () {
-          if (_activeTrip != null && state is TripDangerAlert) {
+      await result.fold(
+        (failure) async {
+          debugPrint('ESP telemetry fetch failed: ${failure.message}');
+          _updateActiveState(
+            detectionStatus: DetectionStatus.offline,
+            isAiReady: false,
+          );
+        },
+        (logs) async {
+          if (logs.isEmpty) {
             _updateActiveState(
-              detectionStatus: _activeTrip!.isStopped
+              detectionStatus: _isTelemetryReady
                   ? DetectionStatus.offline
-                  : DetectionStatus.safe,
-              isAiReady: true,
-              isCameraReady: true,
+                  : DetectionStatus.initializing,
+              isAiReady: _isTelemetryReady,
             );
+            return;
           }
-        });
 
-        return;
-      }
-
-      _safeFrames++;
-      _updateActiveState(
-        detectionStatus: _activeTrip!.isStopped
-            ? DetectionStatus.offline
-            : DetectionStatus.safe,
-        isAiReady: true,
-        isCameraReady: true,
+          final latest = logs.first;
+          _handleTelemetryUpdate(latest);
+        },
       );
     } catch (error) {
-      debugPrint('Trip detection failed: $error');
+      debugPrint('ESP telemetry poll failed: $error');
     } finally {
-      _isDetecting = false;
+      _isPollingTelemetry = false;
     }
+  }
+
+  Future<void> _pollTelemetryStats() async {
+    if (_activeTrip == null || !_activeTrip!.isStarted || !_connectivity.isOnline) {
+      return;
+    }
+
+    final useCase = _loadEspTelemetryStatsUseCase;
+    if (useCase == null) {
+      return;
+    }
+
+    try {
+      final result = await useCase(tripId: _activeTrip!.tripIdOrZero);
+      result.fold(
+        (failure) => debugPrint('ESP telemetry stats failed: ${failure.message}'),
+        _applyTelemetryStats,
+      );
+    } catch (error) {
+      debugPrint('ESP telemetry stats poll failed: $error');
+    }
+  }
+
+  void _handleTelemetryUpdate(EspTelemetryLogEntity latest) {
+    _isTelemetryReady = true;
+    final eventTime = latest.eventTime;
+    final now = DateTime.now();
+
+    if (eventTime != null &&
+        now.difference(eventTime) > AppConstants.espTelemetryStaleThreshold) {
+      _updateActiveState(
+        detectionStatus: DetectionStatus.offline,
+        isAiReady: true,
+      );
+      return;
+    }
+
+    if (_lastTelemetryId != null && latest.id == _lastTelemetryId) {
+      _updateActiveState(
+        detectionStatus: _resolveTelemetryStatus(latest),
+        isAiReady: true,
+      );
+      return;
+    }
+
+    if (eventTime != null && _lastTelemetryAt != null) {
+      if (!eventTime.isAfter(_lastTelemetryAt!)) {
+        _updateActiveState(
+          detectionStatus: _resolveTelemetryStatus(latest),
+          isAiReady: true,
+        );
+        return;
+      }
+    }
+
+    _lastTelemetryId = latest.id;
+    _lastTelemetryAt = eventTime ?? DateTime.now();
+
+    if (!latest.hasDanger) {
+      _updateActiveState(
+        detectionStatus: DetectionStatus.safe,
+        isAiReady: true,
+      );
+      return;
+    }
+
+    final canAlert =
+        _lastAlertTime == null ||
+        now.difference(_lastAlertTime!).inMilliseconds >=
+            AppConstants.alertCooldownMs;
+
+    if (!canAlert) {
+      _updateActiveState(
+        detectionStatus: _resolveTelemetryStatus(latest),
+        isAiReady: true,
+      );
+      return;
+    }
+
+    _lastAlertTime = now;
+    _alertCount++;
+
+    final alertType = _mapTelemetryAlertType(latest);
+    if (alertType == 'drowsiness' || alertType == 'eyes_closed') {
+      _drowsinessAlerts++;
+      _alertService.playDrowsinessAlert();
+    } else {
+      _distractionAlerts++;
+      _alertService.playYawnWarning();
+    }
+
+    unawaited(_saveAlert(alertType));
+
+    final activeState = _buildActiveState(
+      detectionStatus: _resolveTelemetryStatus(latest),
+      isAiReady: true,
+    );
+
+    emit(
+      TripDangerAlert(
+        alertType: alertType,
+        confidence: latest.score,
+        activeState: activeState,
+      ),
+    );
+
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (_activeTrip != null && state is TripDangerAlert) {
+        _updateActiveState(
+          detectionStatus: _activeTrip!.isStopped
+              ? DetectionStatus.offline
+              : DetectionStatus.safe,
+          isAiReady: true,
+        );
+      }
+    });
+  }
+
+  void _applyTelemetryStats(EspTelemetryStatsEntity stats) {
+    if (stats.total <= 0) {
+      return;
+    }
+
+    final safePercent = (stats.safeCount / stats.total) * 100;
+    _awakePercentage = safePercent.clamp(0, 100).toDouble();
+    _updateActiveState();
+  }
+
+  DetectionStatus _resolveTelemetryStatus(EspTelemetryLogEntity latest) {
+    if (_activeTrip?.isStopped ?? false) {
+      return DetectionStatus.offline;
+    }
+
+    if (!latest.faceDetected) {
+      return DetectionStatus.offline;
+    }
+
+    if (latest.eyeAlert || latest.alert || latest.headDown) {
+      return DetectionStatus.drowsy;
+    }
+
+    if (latest.yawn) {
+      return DetectionStatus.yawning;
+    }
+
+    return DetectionStatus.safe;
+  }
+
+  String _mapTelemetryAlertType(EspTelemetryLogEntity latest) {
+    if (!latest.faceDetected) {
+      return 'no_face';
+    }
+
+    if (latest.eyeAlert) {
+      return 'eyes_closed';
+    }
+
+    if (latest.headDown || latest.alert) {
+      return 'drowsiness';
+    }
+
+    if (latest.yawn) {
+      return 'yawning';
+    }
+
+    return 'drowsiness';
   }
 
   Future<void> _saveAlert(String alertType) async {
@@ -837,9 +966,9 @@ class TripCubit extends Cubit<TripState> {
     );
 
     final fallbackDistance = _formatDistanceSummary(_totalDistanceMeters);
-    final awake = _totalFrames > 0
-        ? (_safeFrames / _totalFrames * 100)
-        : (trip?.awakePercentage ?? 100.0);
+    final awake = _lastTelemetryAt != null
+      ? _awakePercentage
+      : (trip?.awakePercentage ?? 100.0);
 
     return TripEnded(
       duration: (trip?.duration ?? '').trim().isNotEmpty
@@ -855,14 +984,15 @@ class TripCubit extends Cubit<TripState> {
   }
 
   void _stopAllSubsystems() {
-    _detectionTimer?.cancel();
-    _detectionTimer = null;
+    _telemetryTimer?.cancel();
+    _telemetryTimer = null;
+    _telemetryStatsTimer?.cancel();
+    _telemetryStatsTimer = null;
 
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = null;
 
     _locationService.stopTracking();
-    _cameraService.dispose();
     _alertService.stop();
     unawaited(WakelockPlus.disable());
   }
@@ -877,7 +1007,6 @@ class TripCubit extends Cubit<TripState> {
   void _updateActiveState({
     DetectionStatus? detectionStatus,
     bool? isAiReady,
-    bool? isCameraReady,
     bool? isOnline,
     int? pendingSyncCount,
     double? latitude,
@@ -892,7 +1021,6 @@ class TripCubit extends Cubit<TripState> {
       _buildActiveState(
         detectionStatus: detectionStatus,
         isAiReady: isAiReady,
-        isCameraReady: isCameraReady,
         isOnline: isOnline,
         pendingSyncCount: pendingSyncCount,
         latitude: latitude,
@@ -905,7 +1033,6 @@ class TripCubit extends Cubit<TripState> {
   TripActive _buildActiveState({
     DetectionStatus? detectionStatus,
     bool? isAiReady,
-    bool? isCameraReady,
     bool? isOnline,
     int? pendingSyncCount,
     double? latitude,
@@ -927,16 +1054,13 @@ class TripCubit extends Cubit<TripState> {
       alertCount: _alertCount,
       drowsinessAlerts: _drowsinessAlerts,
       distractionAlerts: _distractionAlerts,
-      awakePercentage: _totalFrames > 0
-          ? (_safeFrames / _totalFrames * 100)
-          : (_activeTrip?.awakePercentage ?? 100.0),
+      awakePercentage: _lastTelemetryAt != null
+        ? _awakePercentage
+        : (_activeTrip?.awakePercentage ?? 100.0),
       latitude: latitude ?? base?.latitude ?? _activeTrip?.currentLatitude,
       longitude: longitude ?? base?.longitude ?? _activeTrip?.currentLongitude,
       totalDistanceMeters: _totalDistanceMeters,
-      isAiReady:
-          isAiReady ?? base?.isAiReady ?? _detectionService.isInitialized,
-      isCameraReady:
-          isCameraReady ?? base?.isCameraReady ?? _cameraService.isInitialized,
+      isAiReady: isAiReady ?? base?.isAiReady ?? _isTelemetryReady,
       isOnline: isOnline ?? base?.isOnline ?? _connectivity.isOnline,
       pendingSyncCount:
           pendingSyncCount ??
@@ -959,8 +1083,8 @@ class TripCubit extends Cubit<TripState> {
   }
 
   void onAppPaused() {
-    _cameraService.pause();
-    _detectionTimer?.cancel();
+    _telemetryTimer?.cancel();
+    _telemetryStatsTimer?.cancel();
   }
 
   void onAppResumed() {
@@ -968,11 +1092,9 @@ class TripCubit extends Cubit<TripState> {
       return;
     }
 
-    _cameraService.resume();
-    if (_activeTrip!.isStarted &&
-        _cameraService.isInitialized &&
-        _detectionService.isInitialized) {
-      _startDetectionLoop();
+    if (_activeTrip!.isStarted) {
+      _startTelemetryLoop();
+      _startTelemetryStatsLoop();
     }
 
     if (_connectivity.isOnline) {

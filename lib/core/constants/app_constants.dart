@@ -21,9 +21,10 @@ class AppConstants {
   static const int modelInputSize = 320;
   static const int modelNumChannels = 3;
 
-  // ─── Detection Settings ───────────────────────────────────
-  static const int detectionIntervalMs = 1000; // 1 second between frames
+  // ─── Telemetry Settings ───────────────────────────────────
+  static const int detectionIntervalMs = 1000; // telemetry poll interval
   static const int alertCooldownMs = 5000; // min 5s between alerts
+  static const Duration espTelemetryStaleThreshold = Duration(seconds: 12);
   static const double detectionConfidenceThreshold = 0.5;
 
   // ─── Offline Sync ─────────────────────────────────────────

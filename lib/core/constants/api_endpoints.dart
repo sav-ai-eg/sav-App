@@ -42,6 +42,10 @@ class ApiEndpoints {
   static const String alerts = '/api/alerts/';
   static const String alertsStats = '/api/alerts/stats/';
 
+  // ESP telemetry
+  static const String espTelemetry = '/api/esp/telemetry/';
+  static const String espTelemetryStats = '/api/esp/telemetry/stats/';
+
   // Emergencies
   static const String emergencies = '/api/emergencies/';
 

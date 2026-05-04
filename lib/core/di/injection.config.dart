@@ -199,8 +199,6 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i669.CancelTripUseCase>(),
         gh<_i141.LoadTripEventsUseCase>(),
         gh<_i537.CreateTripAlertUseCase>(),
-        gh<_i813.TfliteDetectionService>(),
-        gh<_i155.CameraService>(),
         gh<_i176.LocationService>(),
         gh<_i5.AlertService>(),
         gh<_i789.OfflineCacheService>(),
