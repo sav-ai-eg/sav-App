@@ -85,7 +85,10 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
           previous.hideBottomNav != current.hideBottomNav ||
           current is TripError,
       listener: (context, state) async {
-        context.read<BottomNavCubit>().setHideNavBar(state.hideBottomNav);
+        final bottomNavCubit = context.read<BottomNavCubit>();
+        if (bottomNavCubit.currentIndex == 2) {
+          bottomNavCubit.setHideNavBar(state.hideBottomNav);
+        }
 
         if (state is TripError) {
           SavDialog.showError(context, state.message);
