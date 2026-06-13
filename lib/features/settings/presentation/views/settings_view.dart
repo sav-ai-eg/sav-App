@@ -74,13 +74,13 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
   String _getSoundLabel(String sound) {
     switch (sound) {
-      case 'trucksound.mp3':
+      case 'trucksound.wav':
         return 'Truck Sound (Default)';
-      case 'alert.mp3':
+      case 'alert.wav':
         return 'Alert Bell';
-      case 'alarm.mp3':
+      case 'alarm.wav':
         return 'Digital Alarm';
-      case 'warning.mp3':
+      case 'warning.wav':
         return 'Warning Beep';
       default:
         return sound;
@@ -462,10 +462,10 @@ class _SettingsBodyState extends State<_SettingsBody> {
   Future<void> _showAppPreferencesSheet() async {
     final settingsCubit = context.read<SettingsCubit>();
     const soundOptions = [
-      {'value': 'trucksound.mp3', 'label': 'Truck Sound (Default)'},
-      {'value': 'alert.mp3', 'label': 'Alert Bell'},
-      {'value': 'alarm.mp3', 'label': 'Digital Alarm'},
-      {'value': 'warning.mp3', 'label': 'Warning Beep'},
+      {'value': 'trucksound.wav', 'label': 'Truck Sound (Default)'},
+      {'value': 'alert.wav', 'label': 'Alert Bell'},
+      {'value': 'alarm.wav', 'label': 'Digital Alarm'},
+      {'value': 'warning.wav', 'label': 'Warning Beep'},
     ];
 
     await showModalBottomSheet<void>(

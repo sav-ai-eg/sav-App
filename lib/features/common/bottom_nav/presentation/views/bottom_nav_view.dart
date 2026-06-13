@@ -10,6 +10,7 @@ import 'package:sav/features/home/presentation/views/home_view.dart';
 import 'package:sav/features/settings/presentation/views/settings_view.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/trip_view.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 
 class BottomNavView extends StatefulWidget {
   const BottomNavView({super.key});
@@ -32,6 +33,8 @@ class _BottomNavViewState extends State<BottomNavView> {
       BlocProvider.value(value: _tripCubit, child: const TripView()),
       const SettingsView(),
     ];
+    // Initialize push notifications
+    getIt<PushNotificationService>().initialize();
   }
 
   @override

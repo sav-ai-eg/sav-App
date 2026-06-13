@@ -157,6 +157,28 @@ class BackendApiService {
     }
   }
 
+  Future<void> registerDeviceToken(String token) async {
+    try {
+      final response = await _apiConsumer.post(
+        '/api/notifications/device-tokens/',
+        body: <String, dynamic>{
+          'token': token,
+          'platform': 'android',
+        },
+      );
+      if (!_isSuccess(response.statusCode)) {
+        throw Exception(
+          _extractErrorMessage(
+            response.data,
+            fallback: 'Failed to register device token.',
+          ),
+        );
+      }
+    } on AppException catch (exception) {
+      throw Exception(exception.message);
+    }
+  }
+
   bool _isSuccess(int statusCode) {
     return statusCode >= 200 && statusCode < 300;
   }

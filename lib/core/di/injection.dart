@@ -13,6 +13,8 @@ import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/core/services/trip_navigation_service.dart';
+import 'package:sav/core/services/alert_service.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 import 'package:sav/core/di/injection.config.dart';
 import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source.dart';
 import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source_impl.dart';
@@ -257,6 +259,16 @@ Future<void> configureDependencies() async {
       () => HomeCubit(
         getIt<LoadHomeDashboardUseCase>(),
         getIt<LoadHomeDutyForMonthUseCase>(),
+      ),
+    );
+  }
+
+  if (!getIt.isRegistered<PushNotificationService>()) {
+    getIt.registerLazySingleton<PushNotificationService>(
+      () => PushNotificationService(
+        getIt<BackendApiService>(),
+        getIt<SharedPreferences>(),
+        getIt<AlertService>(),
       ),
     );
   }

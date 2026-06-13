@@ -41,7 +41,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       final resolvedDriver = _mergeVehicleIntoDriver(driver, vehicle);
       final hasValidSession = await _hasValidSession(driverId);
       final selectedAlertSound =
-          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.mp3';
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
 
       emit(
         SettingsLoaded(
@@ -70,7 +70,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       final fallbackDriver = _localFallbackDriver(driverId);
       final resolvedDriver = _mergeVehicleIntoDriver(fallbackDriver, vehicle);
       final selectedAlertSound =
-          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.mp3';
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
 
       emit(
         SettingsLoaded(
