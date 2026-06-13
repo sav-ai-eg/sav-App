@@ -17,6 +17,7 @@ class SettingsLoaded extends SettingsState {
   final DriverModel driver;
   final VehicleInfo? vehicle;
   final bool alertSoundEnabled;
+  final String selectedAlertSound;
   final bool vibrationEnabled;
   final bool notificationsEnabled;
   final int detectionIntervalMs;
@@ -30,6 +31,7 @@ class SettingsLoaded extends SettingsState {
     required this.driver,
     this.vehicle,
     required this.alertSoundEnabled,
+    required this.selectedAlertSound,
     required this.vibrationEnabled,
     required this.notificationsEnabled,
     required this.detectionIntervalMs,
@@ -44,6 +46,7 @@ class SettingsLoaded extends SettingsState {
     DriverModel? driver,
     VehicleInfo? vehicle,
     bool? alertSoundEnabled,
+    String? selectedAlertSound,
     bool? vibrationEnabled,
     bool? notificationsEnabled,
     int? detectionIntervalMs,
@@ -57,6 +60,7 @@ class SettingsLoaded extends SettingsState {
       driver: driver ?? this.driver,
       vehicle: vehicle ?? this.vehicle,
       alertSoundEnabled: alertSoundEnabled ?? this.alertSoundEnabled,
+      selectedAlertSound: selectedAlertSound ?? this.selectedAlertSound,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       detectionIntervalMs: detectionIntervalMs ?? this.detectionIntervalMs,

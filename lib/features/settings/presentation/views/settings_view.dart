@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -60,6 +61,32 @@ class _SettingsBodyState extends State<_SettingsBody> {
     2000,
   ];
 
+  AudioPlayer? _previewPlayer;
+
+  Future<void> _playPreview(String soundFile) async {
+    _previewPlayer ??= AudioPlayer();
+    try {
+      await _previewPlayer!.stop();
+      await _previewPlayer!.setVolume(1.0);
+      await _previewPlayer!.play(AssetSource('sounds/$soundFile'));
+    } catch (_) {}
+  }
+
+  String _getSoundLabel(String sound) {
+    switch (sound) {
+      case 'trucksound.mp3':
+        return 'Truck Sound (Default)';
+      case 'alert.mp3':
+        return 'Alert Bell';
+      case 'alarm.mp3':
+        return 'Digital Alarm';
+      case 'warning.mp3':
+        return 'Warning Beep';
+      default:
+        return sound;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +100,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
   @override
   void dispose() {
+    _previewPlayer?.dispose();
     _setBottomNavHidden(false);
     super.dispose();
   }
@@ -214,6 +242,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
         SizedBox(height: 8.h),
         _PreferencesCard(
           alertSoundEnabled: state.alertSoundEnabled,
+          selectedAlertSound: state.selectedAlertSound,
           vibrationEnabled: state.vibrationEnabled,
           notificationsEnabled: state.notificationsEnabled,
           detectionIntervalMs: state.detectionIntervalMs,
@@ -224,6 +253,8 @@ class _SettingsBodyState extends State<_SettingsBody> {
           onNotificationsChanged: (value) =>
               context.read<SettingsCubit>().setNotificationsEnabled(value),
           onEditInterval: () => _showTripSettingsSheet(state),
+          onSelectSound: () => _showAppPreferencesSheet(),
+          getSoundLabel: _getSoundLabel,
         ),
         SizedBox(height: 16.h),
 
@@ -430,10 +461,17 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
   Future<void> _showAppPreferencesSheet() async {
     final settingsCubit = context.read<SettingsCubit>();
+    const soundOptions = [
+      {'value': 'trucksound.mp3', 'label': 'Truck Sound (Default)'},
+      {'value': 'alert.mp3', 'label': 'Alert Bell'},
+      {'value': 'alarm.mp3', 'label': 'Digital Alarm'},
+      {'value': 'warning.mp3', 'label': 'Warning Beep'},
+    ];
 
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.whiteColor,
+      isScrollControlled: true,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
       ),
@@ -445,7 +483,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
               return const SizedBox.shrink();
             }
 
-            return Padding(
+            return Container(
               padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -471,6 +509,69 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     onChanged: (value) =>
                         settingsCubit.setAlertSoundEnabled(value),
                   ),
+                  if (state.alertSoundEnabled) ...[
+                    Padding(
+                      padding: EdgeInsets.only(top: 8.h, bottom: 4.h),
+                      child: Text(
+                        'Favorite Warning Sound',
+                        style: GoogleFonts.inter(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackColor.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ),
+                    ...soundOptions.map((opt) {
+                      final isSelected = state.selectedAlertSound == opt['value'];
+                      return Container(
+                        margin: EdgeInsets.only(bottom: 6.h),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primaryColor.withValues(alpha: 0.05)
+                              : AppColors.whiteColor,
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppColors.primaryColor
+                                : AppColors.grayColor.withValues(alpha: 0.2),
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: ListTile(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                          title: Text(
+                            opt['label']!,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.sp,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              color: isSelected ? AppColors.primaryColor : AppColors.blackColor,
+                            ),
+                          ),
+                          leading: Radio<String>(
+                            value: opt['value']!,
+                            groupValue: state.selectedAlertSound,
+                            activeColor: AppColors.primaryColor,
+                            onChanged: (value) {
+                              if (value != null) {
+                                settingsCubit.setSelectedAlertSound(value);
+                              }
+                            },
+                          ),
+                          trailing: IconButton(
+                            icon: Icon(
+                              Icons.play_circle_outline_rounded,
+                              color: isSelected ? AppColors.primaryColor : AppColors.grayColor,
+                              size: 24.sp,
+                            ),
+                            onPressed: () => _playPreview(opt['value']!),
+                          ),
+                        ),
+                      );
+                    }),
+                    SizedBox(height: 10.h),
+                  ],
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     value: state.vibrationEnabled,
@@ -911,6 +1012,7 @@ class _CompactInfoRow extends StatelessWidget {
 
 class _PreferencesCard extends StatelessWidget {
   final bool alertSoundEnabled;
+  final String selectedAlertSound;
   final bool vibrationEnabled;
   final bool notificationsEnabled;
   final int detectionIntervalMs;
@@ -918,9 +1020,12 @@ class _PreferencesCard extends StatelessWidget {
   final ValueChanged<bool> onVibrationChanged;
   final ValueChanged<bool> onNotificationsChanged;
   final VoidCallback onEditInterval;
+  final VoidCallback onSelectSound;
+  final String Function(String) getSoundLabel;
 
   const _PreferencesCard({
     required this.alertSoundEnabled,
+    required this.selectedAlertSound,
     required this.vibrationEnabled,
     required this.notificationsEnabled,
     required this.detectionIntervalMs,
@@ -928,6 +1033,8 @@ class _PreferencesCard extends StatelessWidget {
     required this.onVibrationChanged,
     required this.onNotificationsChanged,
     required this.onEditInterval,
+    required this.onSelectSound,
+    required this.getSoundLabel,
   });
 
   @override
@@ -963,6 +1070,40 @@ class _PreferencesCard extends StatelessWidget {
             ),
             onChanged: onAlertSoundChanged,
           ),
+          if (alertSoundEnabled) ...[
+            InkWell(
+              onTap: onSelectSound,
+              borderRadius: BorderRadius.circular(10.r),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.h),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.music_note_rounded,
+                      size: 20.sp,
+                      color: AppColors.primaryColor,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        'Tone: ${getSoundLabel(selectedAlertSound)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20.sp,
+                      color: AppColors.grayColor,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 18.h),
+          ],
           SwitchListTile.adaptive(
             value: vibrationEnabled,
             contentPadding: EdgeInsets.zero,

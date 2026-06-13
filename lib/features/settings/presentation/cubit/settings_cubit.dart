@@ -40,6 +40,8 @@ class SettingsCubit extends Cubit<SettingsState> {
       final vehicle = await _resolveVehicleInfo();
       final resolvedDriver = _mergeVehicleIntoDriver(driver, vehicle);
       final hasValidSession = await _hasValidSession(driverId);
+      final selectedAlertSound =
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.mp3';
 
       emit(
         SettingsLoaded(
@@ -47,6 +49,7 @@ class SettingsCubit extends Cubit<SettingsState> {
             vehicle: vehicle,
           alertSoundEnabled:
               _prefs.getBool(AppConstants.prefAlertSoundEnabled) ?? true,
+          selectedAlertSound: selectedAlertSound,
           vibrationEnabled:
               _prefs.getBool(AppConstants.prefVibrationEnabled) ?? true,
           notificationsEnabled:
@@ -66,12 +69,16 @@ class SettingsCubit extends Cubit<SettingsState> {
       final hasValidSession = await _hasValidSession(driverId);
       final fallbackDriver = _localFallbackDriver(driverId);
       final resolvedDriver = _mergeVehicleIntoDriver(fallbackDriver, vehicle);
+      final selectedAlertSound =
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.mp3';
+
       emit(
         SettingsLoaded(
           driver: resolvedDriver,
           vehicle: vehicle,
           alertSoundEnabled:
               _prefs.getBool(AppConstants.prefAlertSoundEnabled) ?? true,
+          selectedAlertSound: selectedAlertSound,
           vibrationEnabled:
               _prefs.getBool(AppConstants.prefVibrationEnabled) ?? true,
           notificationsEnabled:
@@ -85,6 +92,16 @@ class SettingsCubit extends Cubit<SettingsState> {
         ),
       );
     }
+  }
+
+  Future<void> setSelectedAlertSound(String sound) async {
+    final currentState = state;
+    if (currentState is! SettingsLoaded) {
+      return;
+    }
+
+    await _prefs.setString(AppConstants.prefSelectedAlertSound, sound);
+    emit(currentState.copyWith(selectedAlertSound: sound));
   }
 
   Future<void> setAlertSoundEnabled(bool enabled) async {

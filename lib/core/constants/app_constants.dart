@@ -34,6 +34,7 @@ class AppConstants {
 
   // ─── SharedPreferences Keys ───────────────────────────────
   static const String prefAlertSoundEnabled = 'alertSoundEnabled';
+  static const String prefSelectedAlertSound = 'selectedAlertSound';
   static const String prefVibrationEnabled = 'vibrationEnabled';
   static const String prefDetectionInterval = 'detectionInterval';
   static const String prefDriverId = 'driverId';

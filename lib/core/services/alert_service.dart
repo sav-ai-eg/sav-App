@@ -29,14 +29,20 @@ class AlertService {
       _isPlaying = true;
       try {
         await _player.setVolume(1.0);
-        // Try custom asset first, fall back to system alarm URI
+        final selectedSound =
+            prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.mp3';
+        // Try custom selected asset first, then fallback to standard alert, then system alarm
         try {
-          await _player.play(AssetSource('sounds/alert.mp3'));
+          await _player.play(AssetSource('sounds/$selectedSound'));
         } catch (_) {
-          // Fallback: Android system alarm sound
-          await _player.play(UrlSource(
-            'content://settings/system/alarm_alert',
-          ));
+          try {
+            await _player.play(AssetSource('sounds/alert.mp3'));
+          } catch (_) {
+            // Fallback: Android system alarm sound
+            await _player.play(UrlSource(
+              'content://settings/system/alarm_alert',
+            ));
+          }
         }
         _isPlaying = false;
       } catch (e) {
