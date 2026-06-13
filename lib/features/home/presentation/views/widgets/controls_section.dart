@@ -10,6 +10,7 @@ import 'package:sav/core/util/routing/routes.dart';
 import 'package:sav/core/util/extensions/navigation.dart';
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
 import 'package:sav/features/home/presentation/views/widgets/duty_calendar_dialog.dart';
+import 'package:sav/features/common/chat/presentation/cubit/chat_unread_summary_cubit.dart';
 
 class ControlsSection extends StatelessWidget {
   const ControlsSection({super.key});
@@ -162,7 +163,8 @@ class _EmergencyButton extends StatelessWidget {
         context.pushWithNamed(Routes.emergencyView);
       },
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+        height: 58.h,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppColors.primaryColor,
           borderRadius: BorderRadius.circular(20.r),
@@ -187,13 +189,19 @@ class _EmergencyButton extends StatelessWidget {
               ),
             ),
             SizedBox(width: 16.w),
-            SvgPicture.asset(
-              AppAssets.warningTriangle,
-              width: 14.w,
-              height: 14.h,
-              colorFilter: const ColorFilter.mode(
-                Colors.white,
-                BlendMode.srcIn,
+            SizedBox(
+              width: 24.w,
+              height: 24.h,
+              child: Center(
+                child: SvgPicture.asset(
+                  AppAssets.warningTriangle,
+                  width: 16.w,
+                  height: 16.h,
+                  colorFilter: const ColorFilter.mode(
+                    Colors.white,
+                    BlendMode.srcIn,
+                  ),
+                ),
               ),
             ),
           ],
@@ -209,10 +217,15 @@ class _InboxButton extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        context.pushWithNamed(Routes.chatConversationsView);
+        context.pushWithNamed(Routes.chatConversationsView).then((_) {
+          if (context.mounted) {
+            context.read<ChatUnreadSummaryCubit>().refreshUnreadSummary();
+          }
+        });
       },
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+        height: 58.h,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppColors.salmonLight,
           borderRadius: BorderRadius.circular(20.r),
@@ -236,15 +249,58 @@ class _InboxButton extends StatelessWidget {
                 letterSpacing: -0.176,
               ),
             ),
-            SizedBox(width: 8.w),
-            SvgPicture.asset(
-              AppAssets.inbox,
-              width: 28.w,
-              height: 28.h,
-              colorFilter: const ColorFilter.mode(
-                AppColors.darkNavy,
-                BlendMode.srcIn,
-              ),
+            SizedBox(width: 12.w),
+            BlocBuilder<ChatUnreadSummaryCubit, ChatUnreadSummaryState>(
+              builder: (context, state) {
+                final unreadCount = state.summary?.totalUnreadMessages ?? 0;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    SizedBox(
+                      width: 24.w,
+                      height: 24.h,
+                      child: Center(
+                        child: SvgPicture.asset(
+                          AppAssets.inbox,
+                          width: 20.w,
+                          height: 20.h,
+                          colorFilter: const ColorFilter.mode(
+                            AppColors.darkNavy,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: -4.w,
+                        top: -4.h,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryColor,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: BoxConstraints(
+                            minWidth: 16.w,
+                            minHeight: 16.h,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$unreadCount',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.sp,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),

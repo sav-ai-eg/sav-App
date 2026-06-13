@@ -155,9 +155,9 @@ class _StartTripFormState extends State<StartTripForm> {
                       _connectivityService.isOnline) ...[
                     SizedBox(height: 12.h),
                     _InfoBanner(
-                      text: 'Search is temporarily unavailable',
+                      text: _placesError!,
                       color: AppColors.warningColor,
-                      icon: Icons.wifi_off_rounded,
+                      icon: Icons.error_outline_rounded,
                     ),
                   ],
                   if (!AppConstants.hasGoogleMapsApiKey) ...[
@@ -324,13 +324,13 @@ class _StartTripFormState extends State<StartTripForm> {
           _isSearchingTo = false;
         }
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _placesError = 'Search unavailable';
+        _placesError = e is Exception ? e.toString().replaceAll('Exception: ', '') : 'Search unavailable';
         if (isFromField) {
           _fromSuggestions = const [];
           _isSearchingFrom = false;

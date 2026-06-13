@@ -221,7 +221,7 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
       () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
     );
-    gh.factory<_i138.TripCubit>(
+    gh.lazySingleton<_i138.TripCubit>(
       () => _i138.TripCubit(
         gh<_i872.StartTripUseCase>(),
         gh<_i324.LoadCurrentTripUseCase>(),

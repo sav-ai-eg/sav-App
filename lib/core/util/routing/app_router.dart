@@ -13,6 +13,8 @@ import 'package:sav/features/common/chat/presentation/views/feedback_chat_view.d
 import 'package:sav/features/emergency/presentation/views/emergency_view.dart';
 import 'package:sav/features/splash/presentation/cubit/splash_cubit.dart';
 import 'package:sav/features/splash/presentation/views/splash_view.dart';
+import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
+import 'package:sav/features/common/chat/presentation/cubit/chat_unread_summary_cubit.dart';
 
 class AppRouter {
   Route? generateRoute(RouteSettings settings) {
@@ -36,8 +38,12 @@ class AppRouter {
 
       case Routes.bottomNavView:
         return MaterialPageRoute(
-          builder: (_) => BlocProvider(
-            create: (_) => BottomNavCubit(),
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider(create: (_) => BottomNavCubit()),
+              BlocProvider.value(value: getIt<TripCubit>()),
+              BlocProvider(create: (_) => ChatUnreadSummaryCubit()),
+            ],
             child: const BottomNavView(),
           ),
         );

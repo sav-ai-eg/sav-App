@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/alert_service.dart';
+import 'package:sav/core/di/injection.dart';
+import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -11,6 +14,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class PushNotificationService {
+  static final StreamController<Map<String, dynamic>> _chatMessageStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  static Stream<Map<String, dynamic>> get chatMessageStream =>
+      _chatMessageStreamController.stream;
+
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final BackendApiService _backendApiService;
   final SharedPreferences _prefs;
@@ -125,6 +134,18 @@ class PushNotificationService {
     final String alertType = data['alert_type'] ?? '';
 
     debugPrint('FCM Payload - Type: $type, AlertType: $alertType');
+
+    if (type == 'chat_message' || type == 'chat') {
+      _chatMessageStreamController.add(data);
+    }
+
+    if (type == 'trip' || type == 'trip_event') {
+      try {
+        getIt<TripCubit>().restoreCurrentTrip();
+      } catch (e) {
+        debugPrint('Failed to restore current trip on notification: $e');
+      }
+    }
 
     final soundEnabled = _prefs.getBool(AppConstants.prefAlertSoundEnabled) ?? true;
     if (!soundEnabled) {

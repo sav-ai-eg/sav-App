@@ -32,7 +32,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 part 'trip_state.dart';
 
-@injectable
+@lazySingleton
 class TripCubit extends Cubit<TripState> {
   TripCubit(
     this._startTripUseCase,
