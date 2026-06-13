@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/constants/app_constants.dart';
 
 class ChatConversationItem extends StatelessWidget {
   final int id;
-  final String driverName;
+  final String partnerName;
+  final String? avatarUrl;
   final String lastMessage;
   final DateTime? lastMessageAt;
   final int unreadCount;
@@ -14,7 +17,8 @@ class ChatConversationItem extends StatelessWidget {
   const ChatConversationItem({
     super.key,
     required this.id,
-    required this.driverName,
+    required this.partnerName,
+    this.avatarUrl,
     required this.lastMessage,
     required this.lastMessageAt,
     required this.unreadCount,
@@ -44,7 +48,7 @@ class ChatConversationItem extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const _ConversationAvatar(),
+              _ConversationAvatar(avatarUrl: avatarUrl),
               SizedBox(width: 12.w),
               Expanded(
                 child: Column(
@@ -54,7 +58,7 @@ class ChatConversationItem extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            driverName,
+                            partnerName,
                             style: GoogleFonts.inter(
                               fontSize: 16.sp,
                               fontWeight: FontWeight.w600,
@@ -122,10 +126,55 @@ class ChatConversationItem extends StatelessWidget {
 }
 
 class _ConversationAvatar extends StatelessWidget {
-  const _ConversationAvatar();
+  final String? avatarUrl;
+
+  const _ConversationAvatar({this.avatarUrl});
 
   @override
   Widget build(BuildContext context) {
+    final source = _normalizeAvatarUrl(avatarUrl);
+
+    if (source.isEmpty) {
+      return _fallback();
+    }
+
+    return Container(
+      width: 48.w,
+      height: 48.w,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+      ),
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: source,
+          fit: BoxFit.cover,
+          cacheKey: source,
+          errorWidget: (_, __, ___) => _fallback(),
+          placeholder: (_, __) => _fallback(isLoading: true),
+        ),
+      ),
+    );
+  }
+
+  String _normalizeAvatarUrl(String? value) {
+    final raw = value?.trim() ?? '';
+    if (raw.isEmpty) {
+      return '';
+    }
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return '${AppConstants.apiBaseUrl}$raw';
+    }
+
+    return '${AppConstants.apiBaseUrl}/$raw';
+  }
+
+  Widget _fallback({bool isLoading = false}) {
     return Container(
       width: 48.w,
       height: 48.w,
@@ -133,7 +182,22 @@ class _ConversationAvatar extends StatelessWidget {
         color: AppColors.primaryColor.withValues(alpha: 0.1),
         shape: BoxShape.circle,
       ),
-      child: Icon(Icons.person, color: AppColors.primaryColor, size: 24.sp),
+      child: isLoading
+          ? Center(
+              child: SizedBox(
+                width: 16.w,
+                height: 16.w,
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+            )
+          : Icon(
+              Icons.person,
+              color: AppColors.primaryColor,
+              size: 24.sp,
+            ),
     );
   }
 }

@@ -187,15 +187,17 @@ class _ChatConversationsViewState extends State<ChatConversationsView> {
                       }
 
                       final conversation = state.conversations[index];
-                      final driverName = conversation.driver != null
-                          ? '${conversation.driver!.firstName} ${conversation.driver!.lastName}'
-                                .trim()
-                          : 'Unknown Driver';
+                      final partnerName = conversation.chatPartner?.displayName ??
+                          conversation.driver?.displayName ??
+                          'Support Team';
+                      final avatarUrl = conversation.chatPartner?.avatarUrl ??
+                          conversation.driver?.avatarUrl;
 
                       return ChatConversationItem(
                         key: ValueKey<int>(conversation.id),
                         id: conversation.id,
-                        driverName: driverName,
+                        partnerName: partnerName,
+                        avatarUrl: avatarUrl,
                         lastMessage:
                             conversation.lastMessage?.text ?? 'No messages yet',
                         lastMessageAt: conversation.lastMessageAt,
