@@ -20,6 +20,15 @@ class PushNotificationService {
   static Stream<Map<String, dynamic>> get chatMessageStream =>
       _chatMessageStreamController.stream;
 
+  // ─── Alert Stream ────────────────────────────────────────────────────────
+  // Emits the raw FCM data map when an 'alert' or 'emergency' type notification
+  // arrives, so TripCubit (or any listener) can react in-app without polling.
+  static final StreamController<Map<String, dynamic>> _alertStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  static Stream<Map<String, dynamic>> get alertStream =>
+      _alertStreamController.stream;
+
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final BackendApiService _backendApiService;
   final SharedPreferences _prefs;
@@ -162,8 +171,11 @@ class PushNotificationService {
         // Fallback to standard drowsiness warning sound
         _alertService.playDrowsinessAlert();
       }
+      // Broadcast to in-app listeners (e.g. TripCubit)
+      _alertStreamController.add(data);
     } else if (type == 'emergency') {
       _alertService.playDrowsinessAlert();
+      _alertStreamController.add(data);
     }
   }
 }

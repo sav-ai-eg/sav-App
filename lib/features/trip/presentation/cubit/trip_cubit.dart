@@ -11,6 +11,7 @@ import 'package:sav/core/services/alert_service.dart';
 import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
 import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
@@ -51,6 +52,7 @@ class TripCubit extends Cubit<TripState> {
   ) : super(const TripInitial()) {
     _connectivity.onConnectivityRestored = _onConnectivityRestored;
     _connectivity.onConnectivityLost = _onConnectivityLost;
+    _fcmAlertSubscription = PushNotificationService.alertStream.listen(_onFcmAlert);
   }
 
   final StartTripUseCase _startTripUseCase;
@@ -86,6 +88,7 @@ class TripCubit extends Cubit<TripState> {
   Timer? _telemetryTimer;
   Timer? _telemetryStatsTimer;
   Timer? _locationUpdateTimer;
+  StreamSubscription<Map<String, dynamic>>? _fcmAlertSubscription;
   bool _isPollingTelemetry = false;
   bool _isTransitioning = false;
 
@@ -1106,8 +1109,104 @@ class TripCubit extends Cubit<TripState> {
   Future<void> close() {
     _connectivity.onConnectivityRestored = null;
     _connectivity.onConnectivityLost = null;
+    _fcmAlertSubscription?.cancel();
     _stopAllSubsystems();
     return super.close();
+  }
+
+  // ─── FCM Alert Handler ──────────────────────────────────────────────────
+  /// Called whenever an 'alert' or 'emergency' push notification arrives.
+  /// Triggers the same TripDangerAlert flow as ESP telemetry, so the driver
+  /// sees the red overlay + hears the alarm even when ESP hardware is absent.
+  void _onFcmAlert(Map<String, dynamic> data) {
+    if (_activeTrip == null) {
+      return; // no active trip – ignore
+    }
+
+    final String rawAlertType = (data['alert_type'] ?? '').toString().trim();
+    final double confidence =
+        double.tryParse((data['confidence'] ?? '0.9').toString()) ?? 0.9;
+
+    final String alertType = _normaliseFcmAlertType(rawAlertType);
+
+    final now = DateTime.now();
+    final canAlert =
+        _lastAlertTime == null ||
+        now.difference(_lastAlertTime!).inMilliseconds >=
+            AppConstants.alertCooldownMs;
+
+    if (!canAlert) {
+      return;
+    }
+
+    _lastAlertTime = now;
+    _alertCount++;
+
+    // Play the appropriate sound
+    if (alertType == 'drowsiness' || alertType == 'eyes_closed') {
+      _drowsinessAlerts++;
+      _alertService.playDrowsinessAlert();
+    } else {
+      _distractionAlerts++;
+      _alertService.playYawnWarning();
+    }
+
+    // Build & emit the danger alert state
+    final activeState = _buildActiveState(
+      detectionStatus: _alertTypeToDetectionStatus(alertType),
+      isAiReady: true,
+    );
+
+    emit(
+      TripDangerAlert(
+        alertType: alertType,
+        confidence: confidence,
+        activeState: activeState,
+      ),
+    );
+
+    // Auto-dismiss after 3 seconds
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (_activeTrip != null && state is TripDangerAlert) {
+        _updateActiveState(
+          detectionStatus: _activeTrip!.isStopped
+              ? DetectionStatus.offline
+              : DetectionStatus.safe,
+          isAiReady: true,
+        );
+      }
+    });
+  }
+
+  /// Normalises backend alert_type values to the alertType strings used
+  /// by TripDangerAlert / the alert overlay.
+  String _normaliseFcmAlertType(String raw) {
+    switch (raw) {
+      case 'sleep':
+      case 'drowsy':
+      case 'head_down':
+        return 'drowsiness';
+      case 'eyes_closed':
+        return 'eyes_closed';
+      case 'yawning':
+        return 'yawning';
+      case 'no_face':
+        return 'no_face';
+      default:
+        return 'drowsiness'; // safe fallback
+    }
+  }
+
+  DetectionStatus _alertTypeToDetectionStatus(String alertType) {
+    switch (alertType) {
+      case 'drowsiness':
+      case 'eyes_closed':
+        return DetectionStatus.drowsy;
+      case 'yawning':
+        return DetectionStatus.yawning;
+      default:
+        return DetectionStatus.drowsy;
+    }
   }
 
   String _formatDurationSummary(Duration difference) {
