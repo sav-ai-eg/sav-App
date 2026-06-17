@@ -18,6 +18,8 @@ import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart'
 import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/entities/alert_entity.dart';
+import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
 import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_stats_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/cancel_trip_use_case.dart';
@@ -91,6 +93,10 @@ class TripCubit extends Cubit<TripState> {
   StreamSubscription<Map<String, dynamic>>? _fcmAlertSubscription;
   bool _isPollingTelemetry = false;
   bool _isTransitioning = false;
+
+  TripRepository get _tripRepository => GetIt.instance<TripRepository>();
+  int? _lastAlertId;
+  bool _isPollingAlerts = false;
 
   bool _isTelemetryReady = false;
   int? _lastTelemetryId;
@@ -461,13 +467,18 @@ class TripCubit extends Cubit<TripState> {
     _lastTelemetryId = null;
     _lastTelemetryAt = null;
     _isTransitioning = false;
+    _lastAlertId = null;
+    _isPollingAlerts = false;
   }
 
   void _startTelemetryLoop() {
     _telemetryTimer?.cancel();
     _telemetryTimer = Timer.periodic(
       Duration(milliseconds: AppConstants.detectionIntervalMs),
-      (_) => _pollTelemetryLatest(),
+      (_) {
+        _pollTelemetryLatest();
+        _pollAlertsLatest();
+      },
     );
   }
 
@@ -640,17 +651,6 @@ class TripCubit extends Cubit<TripState> {
         activeState: activeState,
       ),
     );
-
-    Future<void>.delayed(const Duration(seconds: 3), () {
-      if (_activeTrip != null && state is TripDangerAlert) {
-        _updateActiveState(
-          detectionStatus: _activeTrip!.isStopped
-              ? DetectionStatus.offline
-              : DetectionStatus.safe,
-          isAiReady: true,
-        );
-      }
-    });
   }
 
   void _applyTelemetryStats(EspTelemetryStatsEntity stats) {
@@ -1164,18 +1164,6 @@ class TripCubit extends Cubit<TripState> {
         activeState: activeState,
       ),
     );
-
-    // Auto-dismiss after 3 seconds
-    Future<void>.delayed(const Duration(seconds: 3), () {
-      if (_activeTrip != null && state is TripDangerAlert) {
-        _updateActiveState(
-          detectionStatus: _activeTrip!.isStopped
-              ? DetectionStatus.offline
-              : DetectionStatus.safe,
-          isAiReady: true,
-        );
-      }
-    });
   }
 
   /// Normalises backend alert_type values to the alertType strings used
@@ -1329,5 +1317,101 @@ class TripCubit extends Cubit<TripState> {
     }
 
     return double.tryParse(value.toString());
+  }
+
+  // ─── Alerts Polling & Acknowledgment ──────────────────────────────────────
+
+  Future<void> _pollAlertsLatest() async {
+    if (_isPollingAlerts ||
+        _activeTrip == null ||
+        !_activeTrip!.isStarted ||
+        !_connectivity.isOnline) {
+      return;
+    }
+
+    _isPollingAlerts = true;
+
+    try {
+      final result = await _tripRepository.loadTripAlerts(
+        tripId: _activeTrip!.tripIdOrZero,
+      );
+
+      await result.fold(
+        (failure) async {
+          debugPrint('Trip alerts fetch failed: ${failure.message}');
+        },
+        (alerts) async {
+          if (alerts.isEmpty) {
+            return;
+          }
+
+          // Alerts are sorted by -created_at on the backend.
+          final latest = alerts.first;
+
+          if (_lastAlertId == null) {
+            _lastAlertId = latest.id;
+            return;
+          }
+
+          if (latest.id > _lastAlertId!) {
+            _lastAlertId = latest.id;
+            _handleBackendAlert(latest);
+          }
+        },
+      );
+    } catch (error) {
+      debugPrint('Trip alerts poll failed: $error');
+    } finally {
+      _isPollingAlerts = false;
+    }
+  }
+
+  void _handleBackendAlert(AlertEntity alert) {
+    final now = DateTime.now();
+    final canAlert =
+        _lastAlertTime == null ||
+        now.difference(_lastAlertTime!).inMilliseconds >=
+            AppConstants.alertCooldownMs;
+
+    if (!canAlert) {
+      return;
+    }
+
+    _lastAlertTime = now;
+    _alertCount++;
+
+    final alertType = _normaliseFcmAlertType(alert.alertType);
+    if (alertType == 'drowsiness' || alertType == 'eyes_closed') {
+      _drowsinessAlerts++;
+      _alertService.playDrowsinessAlert();
+    } else {
+      _distractionAlerts++;
+      _alertService.playYawnWarning();
+    }
+
+    final activeState = _buildActiveState(
+      detectionStatus: _alertTypeToDetectionStatus(alertType),
+      isAiReady: true,
+    );
+
+    emit(
+      TripDangerAlert(
+        alertType: alertType,
+        confidence: 0.95,
+        activeState: activeState,
+      ),
+    );
+  }
+
+  void acknowledgeAlert() {
+    if (_activeTrip != null && state is TripDangerAlert) {
+      _alertService.stop();
+      _updateActiveState(
+        detectionStatus: _activeTrip!.isStopped
+            ? DetectionStatus.offline
+            : DetectionStatus.safe,
+        isAiReady: true,
+      );
+    }
   }
 }

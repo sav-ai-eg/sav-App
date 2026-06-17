@@ -2,6 +2,7 @@ import 'package:sav/features/trip/data/models/trip_event_model.dart';
 import 'package:sav/features/trip/data/models/trip_model.dart';
 import 'package:sav/features/trip/data/models/esp_telemetry_log_model.dart';
 import 'package:sav/features/trip/data/models/esp_telemetry_stats_model.dart';
+import 'package:sav/features/trip/data/models/alert_model.dart';
 
 abstract class TripRemoteDataSource {
   Future<TripModel> startTrip({
@@ -77,4 +78,6 @@ abstract class TripRemoteDataSource {
     int? tripId,
     String? deviceUid,
   });
+
+  Future<List<AlertModel>> loadTripAlerts({required int tripId});
 }

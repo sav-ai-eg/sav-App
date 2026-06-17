@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get_it/get_it.dart';
@@ -102,11 +103,8 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
 
     if (widget.dangerAlert != null && oldWidget.dangerAlert == null) {
       _alertAnimController.forward(from: 0);
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          _alertAnimController.reverse();
-        }
-      });
+    } else if (widget.dangerAlert == null && oldWidget.dangerAlert != null) {
+      _alertAnimController.reverse();
     }
   }
 
@@ -316,45 +314,102 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
               final title = isNoFace
                   ? 'Face not detected'
                   : (isDrowsy ? 'Drowsiness detected' : 'Yawning detected');
-              return IgnorePointer(
-                child: Container(
-                  color: AppColors.errorColor.withValues(
-                    alpha: 0.34 * _alertOpacity.value,
-                  ),
-                  child: _alertOpacity.value <= 0.2
-                      ? const SizedBox.shrink()
-                      : Center(
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 22.w,
-                              vertical: 20.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.96),
-                              borderRadius: BorderRadius.circular(24.r),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  icon,
-                                  size: 42.sp,
-                                  color: AppColors.errorColor,
+              return Container(
+                color: AppColors.errorColor.withValues(
+                  alpha: 0.34 * _alertOpacity.value,
+                ),
+                child: _alertOpacity.value <= 0.2
+                    ? const SizedBox.shrink()
+                    : Center(
+                        child: Container(
+                          width: 320.w,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 24.w,
+                            vertical: 28.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.98),
+                            borderRadius: BorderRadius.circular(24.r),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              )
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                icon,
+                                size: 56.sp,
+                                color: AppColors.errorColor,
+                              ),
+                              SizedBox(height: 16.h),
+                              Text(
+                                title,
+                                style: GoogleFonts.inter(
+                                  fontSize: 20.sp,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimaryColor,
                                 ),
-                                SizedBox(height: 10.h),
-                                Text(
-                                  title,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 18.sp,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimaryColor,
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 8.h),
+                              Text(
+                                "Please focus on the road.",
+                                style: GoogleFonts.inter(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textSecondaryColor,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 24.h),
+                                SizedBox(
+                                width: double.infinity,
+                                height: 50.h,
+                                child: ElevatedButton(
+                                  onPressed: _isProcessingAction
+                                      ? null
+                                      : () async {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isProcessingAction = true;
+                                            });
+                                          }
+                                          HapticFeedback.lightImpact();
+                                          final cubit = context.read<TripCubit>();
+                                          await _alertAnimController.reverse();
+                                          if (mounted) {
+                                            cubit.acknowledgeAlert();
+                                            setState(() {
+                                              _isProcessingAction = false;
+                                            });
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.errorColor,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14.r),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    "I'm Awake / تمام، فقت",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16.sp,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
-                ),
+                      ),
               );
             },
           ),

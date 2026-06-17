@@ -7,6 +7,7 @@ import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart'
 import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/entities/alert_entity.dart';
 import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
 
 @Injectable(as: TripRepository)
@@ -331,6 +332,22 @@ class TripRepositoryImpl implements TripRepository {
         return normalized;
       default:
         return 'no_face';
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<AlertEntity>>> loadTripAlerts({
+    required int tripId,
+  }) async {
+    try {
+      final alerts = await _remoteDataSource.loadTripAlerts(tripId: tripId);
+      return Right<Failure, List<AlertEntity>>(alerts);
+    } on AppException catch (exception) {
+      return Left<Failure, List<AlertEntity>>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, List<AlertEntity>>(
+        ApiFailure('Unable to load trip alerts right now.'),
+      );
     }
   }
 }

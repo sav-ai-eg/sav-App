@@ -4,6 +4,7 @@ import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart'
 import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/entities/alert_entity.dart';
 
 abstract class TripRepository {
   Future<Either<Failure, TripEntity>> startTrip({
@@ -80,5 +81,9 @@ abstract class TripRepository {
   Future<Either<Failure, EspTelemetryStatsEntity>> loadEspTelemetryStats({
     int? tripId,
     String? deviceUid,
+  });
+
+  Future<Either<Failure, List<AlertEntity>>> loadTripAlerts({
+    required int tripId,
   });
 }
