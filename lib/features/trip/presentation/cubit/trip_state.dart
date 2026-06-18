@@ -13,6 +13,11 @@ class TripInitial extends TripState {
   const TripInitial();
 }
 
+class TripAssignedLoaded extends TripState {
+  final List<TripEntity> trips;
+  const TripAssignedLoaded(this.trips);
+}
+
 class TripLoading extends TripState {
   final String title;
   final String message;

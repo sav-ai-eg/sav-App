@@ -52,6 +52,19 @@ class TripRemoteDataSourceImpl implements TripRemoteDataSource {
   }
 
   @override
+  Future<TripModel> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    return _transitionTrip(
+      path: ApiEndpoints.tripStart(tripId),
+      fallbackMessage: 'Unable to start this trip right now.',
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+  @override
   Future<TripModel?> loadCurrentTrip() async {
     try {
       final response = await _apiConsumer.get(ApiEndpoints.tripsCurrent);

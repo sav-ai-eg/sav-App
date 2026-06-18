@@ -92,6 +92,8 @@ import 'package:sav/features/trip/domain/usecases/push_trip_location_use_case.da
     as _i897;
 import 'package:sav/features/trip/domain/usecases/resume_trip_use_case.dart'
     as _i748;
+import 'package:sav/features/trip/domain/usecases/start_existing_trip_use_case.dart'
+    as _i702;
 import 'package:sav/features/trip/domain/usecases/start_trip_use_case.dart'
     as _i872;
 import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart'
@@ -202,6 +204,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i748.ResumeTripUseCase>(
       () => _i748.ResumeTripUseCase(gh<_i389.TripRepository>()),
     );
+    gh.factory<_i702.StartExistingTripUseCase>(
+      () => _i702.StartExistingTripUseCase(gh<_i389.TripRepository>()),
+    );
     gh.factory<_i872.StartTripUseCase>(
       () => _i872.StartTripUseCase(gh<_i389.TripRepository>()),
     );
@@ -215,16 +220,12 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i441.ConnectivityService>(),
       ),
     );
-    gh.factory<_i193.LoadHomeDashboardUseCase>(
-      () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),
-    );
-    gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
-      () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
-    );
     gh.lazySingleton<_i138.TripCubit>(
       () => _i138.TripCubit(
         gh<_i872.StartTripUseCase>(),
+        gh<_i702.StartExistingTripUseCase>(),
         gh<_i324.LoadCurrentTripUseCase>(),
+        gh<_i364.LoadDriverTripHistoryUseCase>(),
         gh<_i897.PushTripLocationUseCase>(),
         gh<_i133.StopTripUseCase>(),
         gh<_i748.ResumeTripUseCase>(),
@@ -237,6 +238,12 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i789.OfflineCacheService>(),
         gh<_i441.ConnectivityService>(),
       ),
+    );
+    gh.factory<_i193.LoadHomeDashboardUseCase>(
+      () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),
+    );
+    gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
+      () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
     );
     gh.factory<_i596.BootstrapChatConversationUseCase>(
       () => _i596.BootstrapChatConversationUseCase(gh<_i578.ChatRepository>()),

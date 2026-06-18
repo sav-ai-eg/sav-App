@@ -10,7 +10,7 @@ import 'package:sav/core/widgets/sav_dialog.dart';
 import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/active_trip_widget.dart';
-import 'package:sav/features/trip/presentation/views/widgets/start_trip_form.dart';
+import 'package:sav/features/trip/presentation/views/widgets/assigned_trips_view.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class TripView extends StatefulWidget {
@@ -187,6 +187,10 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
       return _TripEndedContent(state: state);
     }
 
+    if (state is TripAssignedLoaded) {
+      return AssignedTripsView(trips: state.trips);
+    }
+
     if (state is TripError) {
       final activeState = context.read<TripCubit>().activeSnapshot;
       if (activeState != null) {
@@ -194,7 +198,7 @@ class _TripViewState extends State<TripView> with WidgetsBindingObserver {
       }
     }
 
-    return const StartTripForm();
+    return const AssignedTripsView(trips: []);
   }
 }
 

@@ -42,6 +42,29 @@ class TripRepositoryImpl implements TripRepository {
   }
 
   @override
+  Future<Either<Failure, TripEntity>> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final trip = await _remoteDataSource.startExistingTrip(
+        tripId: tripId,
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      return Right<Failure, TripEntity>(trip);
+    } on AppException catch (exception) {
+      return Left<Failure, TripEntity>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, TripEntity>(
+        ApiFailure('Unable to start trip right now. Please try again.'),
+      );
+    }
+  }
+
+  @override
   Future<Either<Failure, TripEntity?>> loadCurrentTrip() async {
     try {
       final trip = await _remoteDataSource.loadCurrentTrip();

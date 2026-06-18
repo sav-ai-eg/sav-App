@@ -31,6 +31,8 @@ import 'package:sav/features/trip/domain/usecases/push_trip_location_use_case.da
 import 'package:sav/features/trip/domain/usecases/resume_trip_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/start_trip_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_driver_trip_history_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/start_existing_trip_use_case.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 part 'trip_state.dart';
@@ -39,7 +41,9 @@ part 'trip_state.dart';
 class TripCubit extends Cubit<TripState> {
   TripCubit(
     this._startTripUseCase,
+    this._startExistingTripUseCase,
     this._loadCurrentTripUseCase,
+    this._loadDriverTripHistoryUseCase,
     this._pushTripLocationUseCase,
     this._stopTripUseCase,
     this._resumeTripUseCase,
@@ -58,7 +62,9 @@ class TripCubit extends Cubit<TripState> {
   }
 
   final StartTripUseCase _startTripUseCase;
+  final StartExistingTripUseCase _startExistingTripUseCase;
   final LoadCurrentTripUseCase _loadCurrentTripUseCase;
+  final LoadDriverTripHistoryUseCase _loadDriverTripHistoryUseCase;
   final PushTripLocationUseCase _pushTripLocationUseCase;
   final StopTripUseCase _stopTripUseCase;
   final ResumeTripUseCase _resumeTripUseCase;
@@ -130,6 +136,7 @@ class TripCubit extends Cubit<TripState> {
       },
       (trip) async {
         if (trip == null) {
+          await loadAssignedTrips();
           return;
         }
 
@@ -200,6 +207,110 @@ class TripCubit extends Cubit<TripState> {
         destinationAddress: to.fullText,
         startLatitude: startLatitude,
         startLongitude: startLongitude,
+      );
+
+      await result.fold(
+        (failure) async {
+          final message = _mapFailureMessage(failure);
+          if (_isActiveTripConflict(message)) {
+            await restoreCurrentTrip();
+            emit(
+              const TripError(
+                message:
+                    'You already have an active trip. Finish or cancel it before starting a new one.',
+                keepNavigationHidden: true,
+              ),
+            );
+            return;
+          }
+
+          emit(TripError(message: message));
+        },
+        (trip) async {
+          _activeTrip = trip;
+          _resetCounters();
+          _lastPosition = startPosition;
+
+          await WakelockPlus.enable();
+          await _initializeSubsystems(
+            initialLatitude: startLatitude,
+            initialLongitude: startLongitude,
+          );
+
+          _tripLiveUpdates?.emit(
+            type: TripLiveUpdateType.started,
+            tripId: trip.tripIdOrZero,
+          );
+        },
+      );
+    } catch (error) {
+      _stopAllSubsystems();
+      _activeTrip = null;
+      _resetCounters();
+      emit(TripError(message: _resolveErrorMessage(error)));
+    }
+  }
+
+  Future<void> loadAssignedTrips() async {
+    emit(
+      const TripLoading(
+        title: 'Loading trips',
+        message: 'Fetching your assigned trips.',
+      ),
+    );
+
+    final result = await _loadDriverTripHistoryUseCase(status: 'created');
+    result.fold(
+      (failure) {
+        emit(TripError(message: _mapFailureMessage(failure)));
+      },
+      (trips) {
+        emit(TripAssignedLoaded(trips));
+      },
+    );
+  }
+
+  Future<void> startExistingTrip({
+    required int tripId,
+  }) async {
+    if (_activeTrip != null ||
+        state is TripLoading ||
+        state is TripEnding ||
+        _isTransitioning) {
+      return;
+    }
+
+    if (!_connectivity.isOnline) {
+      emit(
+        const TripError(
+          message: 'Internet connection is required to start a trip.',
+        ),
+      );
+      return;
+    }
+
+    emit(
+      const TripLoading(
+        title: 'Preparing your trip',
+        message: 'Checking location and trip session.',
+      ),
+    );
+
+    try {
+      final startPosition = await _locationService.getCurrentPosition();
+      final startLatitude = startPosition?.latitude;
+      final startLongitude = startPosition?.longitude;
+
+      if (startLatitude == null || startLongitude == null) {
+        throw Exception(
+          'Unable to determine starting location. Please enable GPS and try again.',
+        );
+      }
+
+      final result = await _startExistingTripUseCase(
+        tripId: tripId,
+        latitude: startLatitude,
+        longitude: startLongitude,
       );
 
       await result.fold(

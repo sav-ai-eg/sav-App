@@ -12,6 +12,12 @@ abstract class TripRemoteDataSource {
     required double startLongitude,
   });
 
+  Future<TripModel> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
+  });
+
   Future<TripModel?> loadCurrentTrip();
 
   Future<void> pushTripLocation({

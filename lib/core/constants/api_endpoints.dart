@@ -21,6 +21,7 @@ class ApiEndpoints {
   // Trips
   static const String trips = '/api/trips/';
   static const String tripsStart = '/api/trips/start/';
+  static String tripStart(int tripId) => '/api/trips/$tripId/start/';
   static const String tripsCurrent = '/api/trips/current/';
   static const String tripsStats = '/api/trips/stats/';
 

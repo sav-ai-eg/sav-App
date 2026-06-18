@@ -14,6 +14,12 @@ abstract class TripRepository {
     required double startLongitude,
   });
 
+  Future<Either<Failure, TripEntity>> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
+  });
+
   Future<Either<Failure, TripEntity?>> loadCurrentTrip();
 
   Future<Either<Failure, Unit>> pushTripLocation({
