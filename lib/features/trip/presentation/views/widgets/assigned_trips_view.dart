@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
@@ -73,15 +74,30 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
         accuracy: LocationAccuracy.high,
         distanceFilter: 3,
       ),
-    ).listen((position) {
+    ).listen((position) async {
       if (!mounted) return;
 
       final speed = position.speed; // in m/s
       final hasTrip = _selectedTrip != null;
       final notStarting = !_isStarting;
       final notPrompting = !_showAutoStartPrompt;
-      final notInCooldown = _lastCancelledTime == null ||
-          DateTime.now().difference(_lastCancelledTime!) > const Duration(minutes: 5);
+
+      // Check persistent cooldown
+      final prefs = await SharedPreferences.getInstance();
+      final cooldownStr = prefs.getString('sav_auto_start_cooldown_until');
+      bool notInCooldown = true;
+      if (cooldownStr != null) {
+        final cooldownUntil = DateTime.tryParse(cooldownStr);
+        if (cooldownUntil != null && DateTime.now().isBefore(cooldownUntil)) {
+          notInCooldown = false;
+        }
+      }
+
+      // Memory fallback cooldown if needed
+      if (_lastCancelledTime != null &&
+          DateTime.now().difference(_lastCancelledTime!) <= const Duration(minutes: 5)) {
+        notInCooldown = false;
+      }
 
       if (speed > 1.5 && hasTrip && notStarting && notPrompting && notInCooldown) {
         _triggerAutoStartCountdown();
@@ -112,8 +128,11 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
     });
   }
 
-  void _cancelAutoStart() {
+  void _cancelAutoStart() async {
     _countdownTimer?.cancel();
+    final prefs = await SharedPreferences.getInstance();
+    final cooldownUntil = DateTime.now().add(const Duration(minutes: 5));
+    await prefs.setString('sav_auto_start_cooldown_until', cooldownUntil.toIso8601String());
     setState(() {
       _showAutoStartPrompt = false;
       _lastCancelledTime = DateTime.now();

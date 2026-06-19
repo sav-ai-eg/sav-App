@@ -28,6 +28,19 @@ class AlertService {
     if (soundEnabled && !_isPlaying) {
       _isPlaying = true;
       try {
+        await _player.setAudioContext(AudioContext(
+          android: AudioContextAndroid(
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.alarm,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+            options: {
+              AVAudioSessionOptions.defaultToSpeaker,
+            },
+          ),
+        ));
         await _player.setVolume(1.0);
         final selectedSound =
             prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
@@ -77,6 +90,19 @@ class AlertService {
     if (soundEnabled && !_isPlaying) {
       _isPlaying = true;
       try {
+        await _player.setAudioContext(AudioContext(
+          android: AudioContextAndroid(
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.alarm,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+            options: {
+              AVAudioSessionOptions.defaultToSpeaker,
+            },
+          ),
+        ));
         await _player.setVolume(0.7);
         try {
           await _player.play(AssetSource('sounds/warning.wav'));
