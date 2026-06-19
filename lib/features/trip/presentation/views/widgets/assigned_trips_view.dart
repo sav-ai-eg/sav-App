@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/services/location_service.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/widgets/trip_slide_action.dart';
@@ -21,6 +25,12 @@ class AssignedTripsView extends StatefulWidget {
 
 class _AssignedTripsViewState extends State<AssignedTripsView> {
   TripEntity? _selectedTrip;
+  StreamSubscription<Position>? _positionSubscription;
+  bool _showAutoStartPrompt = false;
+  int _countdownSeconds = 5;
+  Timer? _countdownTimer;
+  DateTime? _lastCancelledTime;
+  bool _isStarting = false;
 
   @override
   void initState() {
@@ -29,6 +39,7 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
     if (widget.trips.isNotEmpty) {
       _selectedTrip = widget.trips.first;
     }
+    _startSpeedMonitoring();
   }
 
   @override
@@ -39,6 +50,91 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
       _selectedTrip = null;
     } else if (_selectedTrip == null || !widget.trips.contains(_selectedTrip)) {
       _selectedTrip = widget.trips.first;
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startSpeedMonitoring() async {
+    final locationService = GetIt.instance<LocationService>();
+    final ready = await locationService.isReady();
+    if (!ready) {
+      final granted = await locationService.requestPermission();
+      if (!granted) return;
+    }
+
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 3,
+      ),
+    ).listen((position) {
+      if (!mounted) return;
+
+      final speed = position.speed; // in m/s
+      final hasTrip = _selectedTrip != null;
+      final notStarting = !_isStarting;
+      final notPrompting = !_showAutoStartPrompt;
+      final notInCooldown = _lastCancelledTime == null ||
+          DateTime.now().difference(_lastCancelledTime!) > const Duration(minutes: 5);
+
+      if (speed > 1.5 && hasTrip && notStarting && notPrompting && notInCooldown) {
+        _triggerAutoStartCountdown();
+      }
+    }, onError: (err) {
+      debugPrint('AssignedTripsView speed monitoring error: $err');
+    });
+  }
+
+  void _triggerAutoStartCountdown() {
+    setState(() {
+      _showAutoStartPrompt = true;
+      _countdownSeconds = 5;
+    });
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_countdownSeconds > 1) {
+          _countdownSeconds--;
+        } else {
+          _countdownTimer?.cancel();
+          _showAutoStartPrompt = false;
+          _startTripDirectly();
+        }
+      });
+    });
+  }
+
+  void _cancelAutoStart() {
+    _countdownTimer?.cancel();
+    setState(() {
+      _showAutoStartPrompt = false;
+      _lastCancelledTime = DateTime.now();
+    });
+  }
+
+  void _startTripDirectly() async {
+    if (_selectedTrip == null || _isStarting) return;
+    setState(() {
+      _isStarting = true;
+    });
+
+    final cubit = context.read<TripCubit>();
+    await cubit.startExistingTrip(
+      tripId: _selectedTrip!.tripIdOrZero,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isStarting = false;
+      });
     }
   }
 
@@ -63,30 +159,177 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
         scrolledUnderElevation: 0,
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primaryColor,
-          backgroundColor: Colors.white,
-          onRefresh: () async {
-            await context.read<TripCubit>().loadAssignedTrips();
-          },
-          child: hasTrips ? _buildTripsList() : _buildEmptyState(),
+        child: Stack(
+          children: [
+            RefreshIndicator(
+              color: AppColors.primaryColor,
+              backgroundColor: Colors.white,
+              onRefresh: () async {
+                await context.read<TripCubit>().loadAssignedTrips();
+              },
+              child: hasTrips ? _buildTripsList() : _buildEmptyState(),
+            ),
+            if (_showAutoStartPrompt)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  child: Center(
+                    child: Container(
+                      margin: EdgeInsets.symmetric(horizontal: 24.w),
+                      padding: EdgeInsets.all(24.w),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24.r),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80.w,
+                            height: 80.w,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 56.w,
+                                  height: 56.w,
+                                  child: CircularProgressIndicator(
+                                    value: _countdownSeconds / 5,
+                                    strokeWidth: 4.w,
+                                    color: AppColors.primaryColor,
+                                    backgroundColor: AppColors.lightGrayColor,
+                                  ),
+                                ),
+                                Text(
+                                  '$_countdownSeconds',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 22.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 20.h),
+                          Text(
+                            'Motion Detected!',
+                            style: GoogleFonts.inter(
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimaryColor,
+                            ),
+                          ),
+                          SizedBox(height: 10.h),
+                          Text(
+                            'It looks like you started driving. Auto-starting Route #${_selectedTrip?.id} in $_countdownSeconds seconds...',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.sp,
+                              color: AppColors.textSecondaryColor,
+                              height: 1.4,
+                            ),
+                          ),
+                          SizedBox(height: 24.h),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _cancelAutoStart,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.darkGrayColor,
+                                    side: const BorderSide(color: AppColors.lightGrayColor),
+                                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14.r),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Cancel',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 12.w),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    _countdownTimer?.cancel();
+                                    setState(() {
+                                      _showAutoStartPrompt = false;
+                                    });
+                                    _startTripDirectly();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryColor,
+                                    foregroundColor: Colors.white,
+                                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14.r),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    'Start Now',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
       bottomNavigationBar: _selectedTrip == null
           ? null
-          : Padding(
+          : Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
               padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-              child: TripSlideAction(
-                label: 'Slide to Start Trip',
-                icon: Icons.play_arrow_rounded,
-                color: AppColors.primaryColor,
-                onSubmit: () async {
-                  final cubit = context.read<TripCubit>();
-                  await cubit.startExistingTrip(
-                    tripId: _selectedTrip!.tripIdOrZero,
-                  );
-                  return true;
-                },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TripSlideAction(
+                    label: 'Slide to Start Route #${_selectedTrip!.id}',
+                    icon: Icons.play_arrow_rounded,
+                    color: AppColors.primaryColor,
+                    onSubmit: () async {
+                      _startTripDirectly();
+                      return true;
+                    },
+                  ),
+                ],
               ),
             ),
     );
@@ -95,7 +338,7 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
   Widget _buildTripsList() {
     return ListView.builder(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       itemCount: widget.trips.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -138,10 +381,11 @@ class _AssignedTripsViewState extends State<AssignedTripsView> {
                 boxShadow: [
                   BoxShadow(
                     color: isSelected
-                        ? AppColors.primaryColor.withValues(alpha: 0.08)
+                        ? AppColors.primaryColor.withValues(alpha: 0.16)
                         : Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    blurRadius: isSelected ? 18 : 12,
+                    spreadRadius: isSelected ? 1.w : 0,
+                    offset: isSelected ? const Offset(0, 6) : const Offset(0, 4),
                   ),
                 ],
               ),
