@@ -295,130 +295,139 @@ class _TripEndedContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCancelled = state.wasCancelled;
 
-    return Center(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 92.w,
-              height: 92.w,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isCancelled
-                      ? <Color>[
-                          AppColors.errorColor.withValues(alpha: 0.22),
-                          AppColors.warningColor.withValues(alpha: 0.18),
-                        ]
-                      : <Color>[
-                          AppColors.successColor.withValues(alpha: 0.20),
-                          AppColors.accentColor.withValues(alpha: 0.22),
-                        ],
-                ),
-                shape: BoxShape.circle,
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        children: [
+          SizedBox(height: 20.h),
+          Container(
+            width: 92.w,
+            height: 92.w,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isCancelled
+                    ? <Color>[
+                        AppColors.errorColor.withValues(alpha: 0.22),
+                        AppColors.warningColor.withValues(alpha: 0.18),
+                      ]
+                    : <Color>[
+                        AppColors.successColor.withValues(alpha: 0.20),
+                        AppColors.accentColor.withValues(alpha: 0.22),
+                      ],
               ),
-              child: Icon(
-                isCancelled
-                    ? Icons.do_not_disturb_on_rounded
-                    : Icons.check_circle_rounded,
-                size: 52.sp,
-                color: isCancelled
-                    ? AppColors.errorColor
-                    : AppColors.successColor,
-              ),
+              shape: BoxShape.circle,
             ),
-            SizedBox(height: 22.h),
-            Text(
-              isCancelled ? 'Trip Cancelled' : 'Trip Completed',
-              style: GoogleFonts.inter(
-                fontSize: 24.sp,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimaryColor,
-              ),
-            ),
-            SizedBox(height: 10.h),
-            Text(
+            child: Icon(
               isCancelled
-                  ? 'Trip cancellation was saved successfully.'
-                  : 'Your trip summary is ready and saved in history.',
-              style: GoogleFonts.inter(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondaryColor,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
+                  ? Icons.do_not_disturb_on_rounded
+                  : Icons.check_circle_rounded,
+              size: 52.sp,
+              color: isCancelled
+                  ? AppColors.errorColor
+                  : AppColors.successColor,
             ),
-            SizedBox(height: 22.h),
-            SavCard(
-              borderRadius: 24,
-              padding: EdgeInsets.all(20.w),
-              child: Column(
-                children: [
-                  _SummaryRow(
-                    icon: Icons.timer_outlined,
-                    label: 'Duration',
-                    value: state.duration ?? '-',
-                  ),
-                  _divider(),
-                  _SummaryRow(
-                    icon: Icons.straighten_rounded,
-                    label: 'Distance',
-                    value: state.distance ?? '-',
-                  ),
-                  _divider(),
-                  _SummaryRow(
-                    icon: Icons.warning_amber_rounded,
-                    label: 'Alerts',
-                    value: '${state.alertCount}',
-                    valueColor: state.alertCount > 0
-                        ? AppColors.errorColor
-                        : AppColors.successColor,
-                  ),
-                  _divider(),
-                  _SummaryRow(
-                    icon: Icons.visibility_rounded,
-                    label: 'Awake score',
-                    value: '${state.awakePercentage.toStringAsFixed(0)}%',
-                    valueColor: state.awakePercentage >= 80
-                        ? AppColors.successColor
-                        : AppColors.warningColor,
-                  ),
-                ],
-              ),
+          ),
+          SizedBox(height: 22.h),
+          Text(
+            isCancelled ? 'Trip Cancelled' : 'Trip Completed',
+            style: GoogleFonts.inter(
+              fontSize: 24.sp,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimaryColor,
             ),
-            SizedBox(height: 18.h),
-            Row(
+          ),
+          SizedBox(height: 10.h),
+          Text(
+            isCancelled
+                ? 'Trip cancellation was saved successfully.'
+                : 'Your trip summary is ready and saved in history.',
+            style: GoogleFonts.inter(
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondaryColor,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 22.h),
+          SavCard(
+            borderRadius: 24,
+            padding: EdgeInsets.all(20.w),
+            child: Column(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      context.read<TripCubit>().resetTrip();
-                      context.read<BottomNavCubit>().changeIndex(index: 1);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryColor,
-                      side: const BorderSide(color: AppColors.primaryColor),
-                      minimumSize: Size(double.infinity, 50.h),
-                    ),
-                    icon: const Icon(Icons.history_rounded),
-                    label: const Text('Open History'),
-                  ),
+                _SummaryRow(
+                  icon: Icons.timer_outlined,
+                  label: 'Duration',
+                  value: state.duration ?? '-',
                 ),
-                SizedBox(width: 10.w),
-                Expanded(
-                  child: SavButton(
-                    text: 'Start New',
-                    icon: Icons.refresh_rounded,
-                    onPressed: () => context.read<TripCubit>().resetTrip(),
-                  ),
+                _divider(),
+                _SummaryRow(
+                  icon: Icons.straighten_rounded,
+                  label: 'Distance',
+                  value: state.distance ?? '-',
+                ),
+                _divider(),
+                _SummaryRow(
+                  icon: Icons.warning_amber_rounded,
+                  label: 'Alerts',
+                  value: '${state.alertCount}',
+                  valueColor: state.alertCount > 0
+                      ? AppColors.errorColor
+                      : AppColors.successColor,
+                ),
+                _divider(),
+                _SummaryRow(
+                  icon: Icons.visibility_rounded,
+                  label: 'Awake score',
+                  value: '${state.awakePercentage.toStringAsFixed(0)}%',
+                  valueColor: state.awakePercentage >= 80
+                      ? AppColors.successColor
+                      : AppColors.warningColor,
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          SizedBox(height: 24.h),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    context.read<TripCubit>().resetTrip();
+                    context.read<BottomNavCubit>().changeIndex(index: 1);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryColor,
+                    side: const BorderSide(color: AppColors.primaryColor, width: 1.5),
+                    minimumSize: Size(double.infinity, 52.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20.r),
+                    ),
+                  ),
+                  icon: Icon(Icons.history_rounded, size: 20.sp),
+                  label: Text(
+                    'Open History',
+                    style: GoogleFonts.inter(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: SavButton(
+                  text: 'Start New',
+                  icon: Icons.refresh_rounded,
+                  onPressed: () => context.read<TripCubit>().resetTrip(),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 40.h), // Safe spacing above bottom navigation bar
+        ],
       ),
     );
   }
