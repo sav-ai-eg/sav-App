@@ -12,6 +12,7 @@ import 'package:sav/core/services/connectivity_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/push_notification_service.dart';
+import 'package:sav/core/services/local_telemetry_server.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/features/trip/data/models/trip_place_model.dart';
 import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
@@ -55,10 +56,12 @@ class TripCubit extends Cubit<TripState> {
     this._alertService,
     this._offlineCache,
     this._connectivity,
+    this._localTelemetryServer,
   ) : super(const TripInitial()) {
     _connectivity.onConnectivityRestored = _onConnectivityRestored;
     _connectivity.onConnectivityLost = _onConnectivityLost;
     _fcmAlertSubscription = PushNotificationService.alertStream.listen(_onFcmAlert);
+    _localTelemetrySubscription = _localTelemetryServer.telemetryStream.listen(_onLocalTelemetry);
   }
 
   final StartTripUseCase _startTripUseCase;
@@ -76,6 +79,7 @@ class TripCubit extends Cubit<TripState> {
   final AlertService _alertService;
   final OfflineCacheService _offlineCache;
   final ConnectivityService _connectivity;
+  final LocalTelemetryServer _localTelemetryServer;
 
   TripLiveUpdatesService? get _tripLiveUpdates =>
       GetIt.instance.isRegistered<TripLiveUpdatesService>()
@@ -97,6 +101,7 @@ class TripCubit extends Cubit<TripState> {
   Timer? _telemetryStatsTimer;
   Timer? _locationUpdateTimer;
   StreamSubscription<Map<String, dynamic>>? _fcmAlertSubscription;
+  StreamSubscription<Map<String, dynamic>>? _localTelemetrySubscription;
   bool _isPollingTelemetry = false;
   bool _isTransitioning = false;
 
@@ -431,6 +436,7 @@ class TripCubit extends Cubit<TripState> {
         _activeTrip = updatedTrip;
         _startTelemetryLoop();
         _startTelemetryStatsLoop();
+        unawaited(_localTelemetryServer.start());
         _tripLiveUpdates?.emit(
           type: TripLiveUpdateType.resumed,
           tripId: updatedTrip.tripIdOrZero,
@@ -551,6 +557,7 @@ class TripCubit extends Cubit<TripState> {
     if (_activeTrip?.isStarted ?? false) {
       _startTelemetryLoop();
       _startTelemetryStatsLoop();
+      unawaited(_localTelemetryServer.start());
     }
 
     _startLocationTracking();
@@ -1108,6 +1115,7 @@ class TripCubit extends Cubit<TripState> {
 
     _locationService.stopTracking();
     _alertService.stop();
+    unawaited(_localTelemetryServer.stop());
     unawaited(WakelockPlus.disable());
   }
 
@@ -1221,6 +1229,7 @@ class TripCubit extends Cubit<TripState> {
     _connectivity.onConnectivityRestored = null;
     _connectivity.onConnectivityLost = null;
     _fcmAlertSubscription?.cancel();
+    _localTelemetrySubscription?.cancel();
     _stopAllSubsystems();
     return super.close();
   }
@@ -1305,6 +1314,78 @@ class TripCubit extends Cubit<TripState> {
         return DetectionStatus.yawning;
       default:
         return DetectionStatus.drowsy;
+    }
+  }
+
+  void _onLocalTelemetry(Map<String, dynamic> data) {
+    if (_activeTrip == null) {
+      return; // no active trip – ignore
+    }
+
+    final bool faceDetected = data['face_detected'] ?? true;
+    final bool eyeAlert = data['eye_alert'] ?? false;
+    final bool yawn = data['yawn'] ?? false;
+    final bool headDown = data['head_down'] ?? false;
+    final bool alert = data['alert'] ?? false;
+    final double confidence =
+        double.tryParse((data['score'] ?? '0.9').toString()) ?? 0.9;
+
+    String? alertType;
+    if (!faceDetected) {
+      alertType = 'no_face';
+    } else if (eyeAlert) {
+      alertType = 'eyes_closed';
+    } else if (headDown || alert) {
+      alertType = 'drowsiness';
+    } else if (yawn) {
+      alertType = 'yawning';
+    }
+
+    if (alertType != null) {
+      final now = DateTime.now();
+      final canAlert =
+          _lastAlertTime == null ||
+          now.difference(_lastAlertTime!).inMilliseconds >=
+              AppConstants.alertCooldownMs;
+
+      if (!canAlert) {
+        return;
+      }
+
+      _lastAlertTime = now;
+      _alertCount++;
+
+      // Play the appropriate sound
+      if (alertType == 'drowsiness' || alertType == 'eyes_closed') {
+        _drowsinessAlerts++;
+        _alertService.playDrowsinessAlert();
+      } else {
+        _distractionAlerts++;
+        _alertService.playYawnWarning();
+      }
+
+      // Save/cache alert locally to sync later
+      unawaited(_saveAlert(alertType));
+
+      // Build & emit the danger alert state
+      final activeState = _buildActiveState(
+        detectionStatus: _alertTypeToDetectionStatus(alertType),
+        isAiReady: true,
+      );
+
+      emit(
+        TripDangerAlert(
+          alertType: alertType,
+          confidence: confidence,
+          activeState: activeState,
+        ),
+      );
+    } else {
+      // Safe state update
+      _updateActiveState(
+        detectionStatus: DetectionStatus.safe,
+        isAiReady: true,
+      );
     }
   }
 

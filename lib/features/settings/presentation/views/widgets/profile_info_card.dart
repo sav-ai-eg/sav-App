@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/core/constants/app_constants.dart';
+import 'package:sav/core/widgets/sav_components.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
 
 class ProfileInfoCard extends StatelessWidget {
@@ -16,25 +17,8 @@ class ProfileInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.only(
-        left: 24.w,
-        right: 35.w,
-        top: 16.h,
-        bottom: 16.h,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.whiteColor,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 4,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return SavCard(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       child: Column(
         children: [
           Row(
@@ -54,7 +38,7 @@ class ProfileInfoCard extends StatelessWidget {
                   child: _ProfileImage(avatarUrl: driver.avatarUrl),
                 ),
               ),
-              SizedBox(width: 13.w),
+              SizedBox(width: 14.w),
               // Driver info
               Expanded(
                 child: Column(
@@ -63,28 +47,28 @@ class ProfileInfoCard extends StatelessWidget {
                     Text(
                       driver.name.isNotEmpty ? driver.name : 'Driver',
                       style: GoogleFonts.inter(
-                        fontSize: 14.sp,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF050A0C),
+                        color: AppColors.textPrimaryColor,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 4.h),
+                    SizedBox(height: 6.h),
                     _InfoRow(
-                      label: 'Phone :',
+                      label: 'Phone:',
                       value: driver.phone.isNotEmpty ? driver.phone : '—',
                     ),
-                    SizedBox(height: 4.h),
+                    SizedBox(height: 6.h),
                     _InfoRow(
-                      label: 'License :',
+                      label: 'License:',
                       value: driver.licenseNumber.isNotEmpty
                           ? driver.licenseNumber
                           : '—',
                     ),
-                    SizedBox(height: 4.h),
+                    SizedBox(height: 6.h),
                     _InfoRow(
-                      label: 'ID :',
+                      label: 'ID:',
                       value: driver.id.length > 8
                           ? driver.id.substring(0, 8)
                           : driver.id,
@@ -176,19 +160,19 @@ class _InfoRow extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 10.sp,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF050A0C),
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondaryColor,
           ),
         ),
-        SizedBox(width: 4.w),
+        SizedBox(width: 6.w),
         Flexible(
           child: Text(
             value,
             style: GoogleFonts.inter(
-              fontSize: 10.sp,
+              fontSize: 13.sp,
               fontWeight: FontWeight.w400,
-              color: const Color(0xFF050A0C),
+              color: AppColors.textPrimaryColor,
             ),
             overflow: TextOverflow.ellipsis,
           ),

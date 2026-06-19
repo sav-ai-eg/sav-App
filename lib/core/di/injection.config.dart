@@ -20,6 +20,7 @@ import 'package:sav/core/services/auth_session_storage.dart' as _i741;
 import 'package:sav/core/services/camera_service.dart' as _i155;
 import 'package:sav/core/services/connectivity_service.dart' as _i441;
 import 'package:sav/core/services/firestore_service.dart' as _i811;
+import 'package:sav/core/services/local_telemetry_server.dart' as _i607;
 import 'package:sav/core/services/location_service.dart' as _i176;
 import 'package:sav/core/services/offline_cache_service.dart' as _i789;
 import 'package:sav/core/services/tflite_detection_service.dart' as _i813;
@@ -120,6 +121,9 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i441.ConnectivityService(),
     );
     gh.lazySingleton<_i811.FirestoreService>(() => _i811.FirestoreService());
+    gh.lazySingleton<_i607.LocalTelemetryServer>(
+      () => _i607.LocalTelemetryServer(),
+    );
     gh.lazySingleton<_i176.LocationService>(() => _i176.LocationService());
     gh.lazySingleton<_i789.OfflineCacheService>(
       () => _i789.OfflineCacheService(),
@@ -213,13 +217,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i133.StopTripUseCase>(
       () => _i133.StopTripUseCase(gh<_i389.TripRepository>()),
     );
-    gh.factory<_i249.HistoryCubit>(
-      () => _i249.HistoryCubit(
-        gh<_i364.LoadDriverTripHistoryUseCase>(),
-        gh<_i789.OfflineCacheService>(),
-        gh<_i441.ConnectivityService>(),
-      ),
-    );
     gh.lazySingleton<_i138.TripCubit>(
       () => _i138.TripCubit(
         gh<_i872.StartTripUseCase>(),
@@ -235,6 +232,14 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i537.CreateTripAlertUseCase>(),
         gh<_i176.LocationService>(),
         gh<_i5.AlertService>(),
+        gh<_i789.OfflineCacheService>(),
+        gh<_i441.ConnectivityService>(),
+        gh<_i607.LocalTelemetryServer>(),
+      ),
+    );
+    gh.factory<_i249.HistoryCubit>(
+      () => _i249.HistoryCubit(
+        gh<_i364.LoadDriverTripHistoryUseCase>(),
         gh<_i789.OfflineCacheService>(),
         gh<_i441.ConnectivityService>(),
       ),

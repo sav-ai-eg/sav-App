@@ -13,6 +13,8 @@ import 'package:sav/core/services/permission_service.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/core/util/extensions/navigation.dart';
 import 'package:sav/core/util/routing/routes.dart';
+import 'package:sav/core/widgets/sav_components.dart';
+import 'package:sav/core/widgets/sav_button.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
 import 'package:sav/features/common/bottom_nav/presentation/cubit/bottom_nav_cubit.dart';
 import 'package:sav/features/settings/presentation/cubit/settings_state.dart';
@@ -198,46 +200,45 @@ class _SettingsBodyState extends State<_SettingsBody> {
         SizedBox(height: 24.h),
         Center(
           child: Text(
-            'Setting & Info',
+            'Settings & Info',
             style: GoogleFonts.inter(
               fontSize: 24.sp,
               fontWeight: FontWeight.w600,
-              color: AppColors.blackColor.withValues(alpha: 0.85),
+              color: AppColors.textPrimaryColor,
               letterSpacing: -0.264,
             ),
           ),
         ),
-        SizedBox(height: 14.h),
-        _SessionHeaderCard(username: state.username, role: normalizedRole),
         SizedBox(height: 16.h),
+        _SessionHeaderCard(username: state.username, role: normalizedRole),
+        SizedBox(height: 20.h),
 
-        SettingsSectionHeader(
-          title: 'Profile info',
-          fontSize: 18,
-          fontWeight: FontWeight.w400,
+        const SettingsSectionHeader(
+          title: 'Profile Info',
+          fontWeight: FontWeight.w600,
         ),
         SizedBox(height: 8.h),
         ProfileInfoCard(driver: driver),
         if (hasCompany || hasEmergency) ...[
-          SizedBox(height: 8.h),
+          SizedBox(height: 10.h),
           _ExtendedProfileCard(
             companyName: driver.companyName,
             emergencyContact: driver.emergencyContact,
           ),
         ],
-        SizedBox(height: 16.h),
+        SizedBox(height: 20.h),
 
-        SettingsSectionHeader(
-          title: 'Vehicle info',
-          fontWeight: FontWeight.w500,
+        const SettingsSectionHeader(
+          title: 'Vehicle Info',
+          fontWeight: FontWeight.w600,
         ),
         SizedBox(height: 8.h),
         VehicleInfoCard(driver: driver, vehicle: state.vehicle),
-        SizedBox(height: 16.h),
+        SizedBox(height: 20.h),
 
-        SettingsSectionHeader(
-          title: 'Quick preferences',
-          fontWeight: FontWeight.w500,
+        const SettingsSectionHeader(
+          title: 'Quick Preferences',
+          fontWeight: FontWeight.w600,
         ),
         SizedBox(height: 8.h),
         _PreferencesCard(
@@ -256,24 +257,32 @@ class _SettingsBodyState extends State<_SettingsBody> {
           onSelectSound: () => _showAppPreferencesSheet(),
           getSoundLabel: _getSoundLabel,
         ),
-        SizedBox(height: 16.h),
+        SizedBox(height: 20.h),
 
-        SettingsSectionHeader(title: 'Settings', fontWeight: FontWeight.w500),
+        const SettingsSectionHeader(
+          title: 'Settings & Support',
+          fontWeight: FontWeight.w600,
+        ),
         SizedBox(height: 8.h),
         SettingsListCard(
           items: [
             SettingsItem(
               title: 'Telemetry Settings',
+              icon: Icons.tune_rounded,
               onTap: () => _showTripSettingsSheet(state),
             ),
             SettingsItem(
               title: 'App Preferences',
+              icon: Icons.settings_suggest_rounded,
               onTap: () => _showAppPreferencesSheet(),
             ),
             SettingsItem(
               title: state.notificationsEnabled
                   ? 'Notifications (Enabled)'
                   : 'Notifications (Disabled)',
+              icon: state.notificationsEnabled
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_off_rounded,
               onTap: () async {
                 await context.read<SettingsCubit>().setNotificationsEnabled(
                   !state.notificationsEnabled,
@@ -291,20 +300,24 @@ class _SettingsBodyState extends State<_SettingsBody> {
             ),
             SettingsItem(
               title: 'Device Status',
+              icon: Icons.developer_board_rounded,
               onTap: () => _showDeviceStatusSheet(state),
             ),
             SettingsItem(
               title: 'Permissions',
+              icon: Icons.security_rounded,
               onTap: () {
                 _requestPermissions();
               },
             ),
             SettingsItem(
               title: 'Support',
+              icon: Icons.contact_support_rounded,
               onTap: () => _showSupportSheet(state),
             ),
             SettingsItem(
               title: 'About',
+              icon: Icons.info_outline_rounded,
               onTap: () {
                 _showAboutDialog();
               },
@@ -420,35 +433,27 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     ),
                   ),
                   SizedBox(height: 8.h),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await settingsCubit.setDetectionIntervalMs(
-                          selectedInterval,
-                        );
+                  SavButton(
+                    text: 'Save',
+                    height: 44.h,
+                    borderRadius: 12,
+                    onPressed: () async {
+                      await settingsCubit.setDetectionIntervalMs(
+                        selectedInterval,
+                      );
 
-                        if (!mounted) {
-                          return;
-                        }
+                      if (!mounted) {
+                        return;
+                      }
 
-                        if (sheetContext.mounted) {
-                          Navigator.of(sheetContext).pop();
-                        }
-                        SavDialog.showSuccess(
-                          context,
-                          'Telemetry refresh updated to $selectedInterval ms.',
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryColor,
-                        foregroundColor: AppColors.whiteColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.r),
-                        ),
-                      ),
-                      child: const Text('Save'),
-                    ),
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                      SavDialog.showSuccess(
+                        context,
+                        'Telemetry refresh updated to $selectedInterval ms.',
+                      );
+                    },
                   ),
                 ],
               ),
@@ -656,23 +661,35 @@ class _SettingsBodyState extends State<_SettingsBody> {
                           Navigator.of(sheetContext).pop();
                         }
                       },
-                      child: const Text('Refresh'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primaryColor,
+                        side: const BorderSide(color: AppColors.primaryColor, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 10.h),
+                      ),
+                      child: Text(
+                        'Refresh',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.sp,
+                        ),
+                      ),
                     ),
                   ),
                   SizedBox(width: 12.w),
                   Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryColor,
-                        foregroundColor: AppColors.whiteColor,
-                      ),
+                    child: SavButton(
+                      text: 'Request',
+                      height: 40.h,
+                      borderRadius: 12,
                       onPressed: () async {
                         if (sheetContext.mounted) {
                           Navigator.of(sheetContext).pop();
                         }
                         await _requestPermissions();
                       },
-                      child: const Text('Request'),
                     ),
                   ),
                 ],
@@ -874,20 +891,8 @@ class _SessionHeaderCard extends StatelessWidget {
     final normalizedUsername = username.trim();
     final normalizedRole = role.trim();
 
-    return Container(
-      width: double.infinity,
+    return SavCard(
       padding: EdgeInsets.all(14.w),
-      decoration: BoxDecoration(
-        color: AppColors.whiteColor,
-        borderRadius: BorderRadius.circular(18.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: Row(
         children: [
           Container(
@@ -948,20 +953,8 @@ class _ExtendedProfileCard extends StatelessWidget {
     final company = companyName?.trim() ?? '';
     final emergency = emergencyContact?.trim() ?? '';
 
-    return Container(
-      width: double.infinity,
+    return SavCard(
       padding: EdgeInsets.all(14.w),
-      decoration: BoxDecoration(
-        color: AppColors.whiteColor,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
       child: Column(
         children: [
           if (company.isNotEmpty)
@@ -990,7 +983,7 @@ class _CompactInfoRow extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 13.sp,
             fontWeight: FontWeight.w500,
-            color: AppColors.grayColor,
+            color: AppColors.textSecondaryColor,
           ),
         ),
         Expanded(
@@ -999,7 +992,7 @@ class _CompactInfoRow extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 13.sp,
               fontWeight: FontWeight.w600,
-              color: AppColors.blackColor,
+              color: AppColors.textPrimaryColor,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1039,20 +1032,8 @@ class _PreferencesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return SavCard(
       padding: EdgeInsets.all(14.w),
-      decoration: BoxDecoration(
-        color: AppColors.whiteColor,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
       child: Column(
         children: [
           SwitchListTile.adaptive(
