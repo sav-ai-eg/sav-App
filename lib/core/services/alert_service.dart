@@ -29,16 +29,30 @@ class AlertService {
       _isPlaying = true;
       try {
         await _player.setVolume(1.0);
-        // Try custom asset first, fall back to system alarm URI
+        final selectedSound =
+            prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
+        // Try custom selected asset first, then fallback to standard alert, then system alarm
         try {
-          await _player.play(AssetSource('sounds/alert.mp3'));
+          await _player.play(AssetSource('sounds/$selectedSound'));
         } catch (_) {
-          // Fallback: Android system alarm sound
-          await _player.play(UrlSource(
-            'content://settings/system/alarm_alert',
-          ));
+          try {
+            await _player.play(AssetSource('sounds/alert.wav'));
+          } catch (_) {
+            // Fallback: Android system alarm sound
+            await _player.play(UrlSource(
+              'content://settings/system/alarm_alert',
+            ));
+          }
         }
-        _isPlaying = false;
+        // Release isPlaying state once sound completes or after 4 seconds safety timeout
+        Future.any<dynamic>([
+          _player.onPlayerComplete.first,
+          Future<void>.delayed(const Duration(seconds: 4)),
+        ]).then((_) {
+          _isPlaying = false;
+        }).catchError((_) {
+          _isPlaying = false;
+        });
       } catch (e) {
         debugPrint('AlertService.playDrowsinessAlert error: $e');
         _isPlaying = false;
@@ -65,14 +79,22 @@ class AlertService {
       try {
         await _player.setVolume(0.7);
         try {
-          await _player.play(AssetSource('sounds/warning.mp3'));
+          await _player.play(AssetSource('sounds/warning.wav'));
         } catch (_) {
           // Fallback: Android system notification sound
           await _player.play(UrlSource(
             'content://settings/system/notification_sound',
           ));
         }
-        _isPlaying = false;
+        // Release isPlaying state once sound completes or after 3 seconds safety timeout
+        Future.any<dynamic>([
+          _player.onPlayerComplete.first,
+          Future<void>.delayed(const Duration(seconds: 3)),
+        ]).then((_) {
+          _isPlaying = false;
+        }).catchError((_) {
+          _isPlaying = false;
+        });
       } catch (e) {
         debugPrint('AlertService.playYawnWarning error: $e');
         _isPlaying = false;

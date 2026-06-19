@@ -12,6 +12,7 @@ class ChatConversationEntity extends Equatable {
     required this.lastMessageAt,
     required this.createdAt,
     required this.updatedAt,
+    this.chatPartner,
   });
 
   final int id;
@@ -22,6 +23,7 @@ class ChatConversationEntity extends Equatable {
   final DateTime? lastMessageAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final AuthUserEntity? chatPartner;
 
   @override
   List<Object?> get props => <Object?>[
@@ -33,5 +35,6 @@ class ChatConversationEntity extends Equatable {
         lastMessageAt,
         createdAt,
         updatedAt,
+        chatPartner,
       ];
 }

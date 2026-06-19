@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get_it/get_it.dart';
@@ -103,11 +104,8 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
 
     if (widget.dangerAlert != null && oldWidget.dangerAlert == null) {
       _alertAnimController.forward(from: 0);
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          _alertAnimController.reverse();
-        }
-      });
+    } else if (widget.dangerAlert == null && oldWidget.dangerAlert != null) {
+      _alertAnimController.reverse();
     }
   }
 
@@ -201,13 +199,8 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                     runSpacing: 8.h,
                     children: [
                       _MiniIndicator(
-                        icon: Icons.videocam_rounded,
-                        label: 'Cam',
-                        active: state.isCameraReady,
-                      ),
-                      _MiniIndicator(
-                        icon: Icons.psychology_rounded,
-                        label: 'AI',
+                        icon: Icons.sensors_rounded,
+                        label: 'ESP',
                         active: state.isAiReady,
                       ),
                       _MiniIndicator(
@@ -307,54 +300,115 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
           ),
         ),
         if (widget.dangerAlert != null)
-          AnimatedBuilder(
-            animation: _alertOpacity,
-            builder: (context, child) {
-              return IgnorePointer(
-                child: Container(
-                  color: AppColors.errorColor.withValues(
-                    alpha: 0.34 * _alertOpacity.value,
-                  ),
-                  child: _alertOpacity.value <= 0.2
-                      ? const SizedBox.shrink()
-                      : Center(
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 22.w,
-                              vertical: 20.h,
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _alertOpacity,
+              builder: (context, child) {
+                if (_alertOpacity.value <= 0.01) {
+                  return const SizedBox.shrink();
+                }
+                final alertType = widget.dangerAlert!.alertType;
+                final isDrowsy =
+                    alertType == 'drowsiness' || alertType == 'eyes_closed';
+                final isNoFace = alertType == 'no_face';
+                final title = isNoFace
+                    ? 'Face not detected'
+                    : (isDrowsy ? 'Drowsy Alert' : 'Yawning Alert');
+
+                final description = isNoFace
+                    ? 'Please keep your eyes on the road\nand ensure your face is visible'
+                    : (isDrowsy
+                        ? 'Take care you are Drowsy if you\nNeed Take a break'
+                        : 'Take care you are Yawning if you\nNeed Take a break');
+
+                return Opacity(
+                  opacity: _alertOpacity.value,
+                  child: Container(
+                    color: const Color(0xFFEF401D),
+                    child: SafeArea(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+                        child: Column(
+                          children: [
+                            SizedBox(height: 50.h),
+                            Text(
+                              title,
+                              style: GoogleFonts.inter(
+                                fontSize: 32.sp,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: -0.5,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.96),
-                              borderRadius: BorderRadius.circular(24.r),
+                            const Spacer(flex: 3),
+                            SirenIcon(
+                              color: Colors.white,
+                              size: 140.w,
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  widget.dangerAlert!.alertType == 'drowsiness'
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.mood_bad_rounded,
-                                  size: 42.sp,
-                                  color: AppColors.errorColor,
-                                ),
-                                SizedBox(height: 10.h),
-                                Text(
-                                  widget.dangerAlert!.alertType == 'drowsiness'
-                                      ? 'Drowsiness detected'
-                                      : 'Yawning detected',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 18.sp,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimaryColor,
+                            const Spacer(flex: 2),
+                            Text(
+                              description,
+                              style: GoogleFonts.inter(
+                                fontSize: 18.sp,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const Spacer(flex: 4),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8.w),
+                              child: SizedBox(
+                                width: double.infinity,
+                                height: 56.h,
+                                child: ElevatedButton(
+                                  onPressed: _isProcessingAction
+                                      ? null
+                                      : () async {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isProcessingAction = true;
+                                            });
+                                          }
+                                          HapticFeedback.lightImpact();
+                                          final cubit = context.read<TripCubit>();
+                                          await _alertAnimController.reverse();
+                                          if (mounted) {
+                                            cubit.acknowledgeAlert();
+                                            setState(() {
+                                              _isProcessingAction = false;
+                                            });
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1C1E21),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28.r),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    "Awake",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 18.sp,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            SizedBox(height: 16.h),
+                          ],
                         ),
-                ),
-              );
-            },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         if (widget.isEnding)
           Positioned.fill(
@@ -1028,8 +1082,6 @@ class _ActiveTripPanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SizedBox(width: 12.w),
-                  const _CameraPreviewCard(),
                 ],
               ),
               SizedBox(height: 18.h),
@@ -1714,32 +1766,122 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-class _CameraPreviewCard extends StatelessWidget {
-  const _CameraPreviewCard();
+class SirenIcon extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const SirenIcon({
+    super.key,
+    required this.color,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cameraService = context.read<TripCubit>().cameraService;
-
-    return Container(
-      width: 96.w,
-      height: 118.h,
-      decoration: BoxDecoration(
-        color: AppColors.darkNavy,
-        borderRadius: BorderRadius.circular(22.r),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22.r),
-        child: cameraService.isInitialized && cameraService.controller != null
-            ? CameraPreview(cameraService.controller!)
-            : Center(
-                child: Icon(
-                  Icons.videocam_off_rounded,
-                  size: 24.sp,
-                  color: Colors.white60,
-                ),
-              ),
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _SirenPainter(color: color),
       ),
     );
   }
 }
+
+class _SirenPainter extends CustomPainter {
+  final Color color;
+
+  _SirenPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final w = size.width;
+    final h = size.height;
+
+    // Base bar (rounded rectangle at the bottom)
+    final baseRect = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.15, h * 0.78, w * 0.85, h * 0.84),
+      Radius.circular(2.r),
+    );
+    canvas.drawRRect(baseRect, paint);
+
+    // Dome Path
+    final domePath = Path();
+    // Start at bottom-left of dome
+    domePath.moveTo(w * 0.22, h * 0.78);
+    // Vertical line up
+    domePath.lineTo(w * 0.22, h * 0.52);
+    // Dome arc curve
+    domePath.cubicTo(
+      w * 0.22, h * 0.32,
+      w * 0.78, h * 0.32,
+      w * 0.78, h * 0.52,
+    );
+    // Vertical line down
+    domePath.lineTo(w * 0.78, h * 0.78);
+    domePath.close();
+
+    // Crescent cutout path
+    final cutoutPath = Path();
+    // Inner/outer arc paths
+    cutoutPath.moveTo(w * 0.34, h * 0.62);
+    cutoutPath.cubicTo(
+      w * 0.34, h * 0.48,
+      w * 0.48, h * 0.42,
+      w * 0.50, h * 0.42,
+    );
+    cutoutPath.cubicTo(
+      w * 0.45, h * 0.44,
+      w * 0.38, h * 0.50,
+      w * 0.38, h * 0.62,
+    );
+    cutoutPath.close();
+
+    // Subtract the crescent cutout from the dome
+    final finalDomePath = Path.combine(
+      PathOperation.difference,
+      domePath,
+      cutoutPath,
+    );
+
+    canvas.drawPath(finalDomePath, paint);
+
+    // Top middle ray (vertical)
+    final middleRay = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.47, h * 0.14, w * 0.53, h * 0.24),
+      Radius.circular(1.r),
+    );
+    canvas.drawRRect(middleRay, paint);
+
+    // Left ray (pointing up-left, -45 degrees)
+    canvas.save();
+    canvas.translate(w * 0.28, h * 0.28);
+    canvas.rotate(-math.pi / 4);
+    final leftRay = RRect.fromRectAndRadius(
+      Rect.fromLTRB(-w * 0.03, -h * 0.06, w * 0.03, h * 0.02),
+      Radius.circular(1.r),
+    );
+    canvas.drawRRect(leftRay, paint);
+    canvas.restore();
+
+    // Right ray (pointing up-right, 45 degrees)
+    canvas.save();
+    canvas.translate(w * 0.72, h * 0.28);
+    canvas.rotate(math.pi / 4);
+    final rightRay = RRect.fromRectAndRadius(
+      Rect.fromLTRB(-w * 0.03, -h * 0.06, w * 0.03, h * 0.02),
+      Radius.circular(1.r),
+    );
+    canvas.drawRRect(rightRay, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _SirenPainter oldDelegate) =>
+      color != oldDelegate.color;
+}
+

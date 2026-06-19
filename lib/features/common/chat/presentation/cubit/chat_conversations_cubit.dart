@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sav/core/di/injection.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 import 'package:sav/features/common/chat/domain/entities/chat_conversation_entity.dart';
 import 'package:sav/features/common/chat/domain/usecases/load_chat_conversations_use_case.dart';
 
@@ -8,9 +10,20 @@ part 'chat_conversations_state.dart';
 class ChatConversationsCubit extends Cubit<ChatConversationsState> {
   ChatConversationsCubit()
     : _loadConversationsUseCase = getIt<LoadChatConversationsUseCase>(),
-      super(const ChatConversationsState.initial());
+      super(const ChatConversationsState.initial()) {
+    _chatSubscription = PushNotificationService.chatMessageStream.listen((data) {
+      refreshConversations();
+    });
+  }
 
   final LoadChatConversationsUseCase _loadConversationsUseCase;
+  StreamSubscription<Map<String, dynamic>>? _chatSubscription;
+
+  @override
+  Future<void> close() {
+    _chatSubscription?.cancel();
+    return super.close();
+  }
 
   Future<void> loadConversations({
     int page = 1,

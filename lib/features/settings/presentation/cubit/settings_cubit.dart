@@ -3,19 +3,23 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sav/core/constants/app_constants.dart';
 import 'package:sav/core/services/auth_session_storage.dart';
+import 'package:sav/core/services/backend_api_service.dart';
 import 'package:sav/core/services/firestore_service.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
 import 'package:sav/features/auth/domain/usecases/logout_use_case.dart';
+import 'package:sav/features/settings/data/models/vehicle_info.dart';
 import 'settings_state.dart';
 
 class SettingsCubit extends Cubit<SettingsState> {
   final FirestoreService _firestoreService;
+  final BackendApiService _backendApiService;
   final SharedPreferences _prefs;
   final LogoutUseCase _logoutUseCase;
   final AuthSessionStorage _authSessionStorage;
 
   SettingsCubit(
     this._firestoreService,
+    this._backendApiService,
     this._prefs,
     this._logoutUseCase,
     this._authSessionStorage,
@@ -31,22 +35,27 @@ class SettingsCubit extends Cubit<SettingsState> {
         return;
       }
 
-      final permissions = await _resolvePermissionStatus();
+      final locationGranted = await _resolveLocationPermissionStatus();
       final driver = await _resolveDriver(driverId);
+      final vehicle = await _resolveVehicleInfo();
+      final resolvedDriver = _mergeVehicleIntoDriver(driver, vehicle);
       final hasValidSession = await _hasValidSession(driverId);
+      final selectedAlertSound =
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
 
       emit(
         SettingsLoaded(
-          driver: driver,
+            driver: resolvedDriver,
+            vehicle: vehicle,
           alertSoundEnabled:
               _prefs.getBool(AppConstants.prefAlertSoundEnabled) ?? true,
+          selectedAlertSound: selectedAlertSound,
           vibrationEnabled:
               _prefs.getBool(AppConstants.prefVibrationEnabled) ?? true,
           notificationsEnabled:
               _prefs.getBool(AppConstants.prefNotificationsEnabled) ?? true,
           detectionIntervalMs: _resolveDetectionIntervalMs(),
-          cameraPermissionGranted: permissions.cameraGranted,
-          locationPermissionGranted: permissions.locationGranted,
+          locationPermissionGranted: locationGranted,
           username:
               _prefs.getString(AppConstants.prefDriverUsername)?.trim() ?? '',
           role: _prefs.getString(AppConstants.prefDriverRole)?.trim() ?? '',
@@ -55,20 +64,27 @@ class SettingsCubit extends Cubit<SettingsState> {
       );
     } catch (_) {
       final driverId = _resolveDriverId() ?? '';
-      final permissions = await _resolvePermissionStatus();
+      final locationGranted = await _resolveLocationPermissionStatus();
+      final vehicle = await _resolveVehicleInfo();
       final hasValidSession = await _hasValidSession(driverId);
+      final fallbackDriver = _localFallbackDriver(driverId);
+      final resolvedDriver = _mergeVehicleIntoDriver(fallbackDriver, vehicle);
+      final selectedAlertSound =
+          _prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
+
       emit(
         SettingsLoaded(
-          driver: _localFallbackDriver(driverId),
+          driver: resolvedDriver,
+          vehicle: vehicle,
           alertSoundEnabled:
               _prefs.getBool(AppConstants.prefAlertSoundEnabled) ?? true,
+          selectedAlertSound: selectedAlertSound,
           vibrationEnabled:
               _prefs.getBool(AppConstants.prefVibrationEnabled) ?? true,
           notificationsEnabled:
               _prefs.getBool(AppConstants.prefNotificationsEnabled) ?? true,
           detectionIntervalMs: _resolveDetectionIntervalMs(),
-          cameraPermissionGranted: permissions.cameraGranted,
-          locationPermissionGranted: permissions.locationGranted,
+          locationPermissionGranted: locationGranted,
           username:
               _prefs.getString(AppConstants.prefDriverUsername)?.trim() ?? '',
           role: _prefs.getString(AppConstants.prefDriverRole)?.trim() ?? '',
@@ -76,6 +92,16 @@ class SettingsCubit extends Cubit<SettingsState> {
         ),
       );
     }
+  }
+
+  Future<void> setSelectedAlertSound(String sound) async {
+    final currentState = state;
+    if (currentState is! SettingsLoaded) {
+      return;
+    }
+
+    await _prefs.setString(AppConstants.prefSelectedAlertSound, sound);
+    emit(currentState.copyWith(selectedAlertSound: sound));
   }
 
   Future<void> setAlertSoundEnabled(bool enabled) async {
@@ -126,13 +152,8 @@ class SettingsCubit extends Cubit<SettingsState> {
       return;
     }
 
-    final permissions = await _resolvePermissionStatus();
-    emit(
-      currentState.copyWith(
-        cameraPermissionGranted: permissions.cameraGranted,
-        locationPermissionGranted: permissions.locationGranted,
-      ),
-    );
+    final locationGranted = await _resolveLocationPermissionStatus();
+    emit(currentState.copyWith(locationPermissionGranted: locationGranted));
   }
 
   Future<String?> signOut() async {
@@ -199,6 +220,45 @@ class SettingsCubit extends Cubit<SettingsState> {
     }
   }
 
+  Future<VehicleInfo?> _resolveVehicleInfo() async {
+    try {
+      final payload = await _backendApiService.fetchAssignedVehicle();
+      if (payload == null || payload.isEmpty) {
+        return null;
+      }
+
+      final vehicle = VehicleInfo.fromMap(payload);
+      await _cacheVehicleInfo(vehicle);
+      return vehicle;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  DriverModel _mergeVehicleIntoDriver(DriverModel driver, VehicleInfo? vehicle) {
+    if (vehicle == null || vehicle.plateNumber.trim().isEmpty) {
+      return driver;
+    }
+
+    if (driver.vehiclePlate.trim().toUpperCase() ==
+        vehicle.plateNumber.trim().toUpperCase()) {
+      return driver;
+    }
+
+    return driver.copyWith(vehiclePlate: vehicle.plateNumber);
+  }
+
+  Future<void> _cacheVehicleInfo(VehicleInfo vehicle) async {
+    if (vehicle.plateNumber.trim().isEmpty) {
+      return;
+    }
+
+    await _prefs.setString(
+      AppConstants.prefDriverVehiclePlate,
+      vehicle.plateNumber.trim().toUpperCase(),
+    );
+  }
+
   DriverModel _localFallbackDriver(String driverId) {
     return DriverModel(
       id: driverId,
@@ -236,10 +296,12 @@ class SettingsCubit extends Cubit<SettingsState> {
       AppConstants.prefDriverLicenseNumber,
       driver.licenseNumber,
     );
-    await _prefs.setString(
-      AppConstants.prefDriverVehiclePlate,
-      driver.vehiclePlate,
-    );
+    if (driver.vehiclePlate.trim().isNotEmpty) {
+      await _prefs.setString(
+        AppConstants.prefDriverVehiclePlate,
+        driver.vehiclePlate,
+      );
+    }
     await _prefs.setString(
       AppConstants.prefDriverCompanyName,
       driver.companyName ?? '',
@@ -254,29 +316,16 @@ class SettingsCubit extends Cubit<SettingsState> {
     );
   }
 
-  ({bool cameraGranted, bool locationGranted}) _mapPermissionStatus({
-    required PermissionStatus cameraStatus,
-    required PermissionStatus locationStatus,
-  }) {
-    final cameraGranted = cameraStatus.isGranted || cameraStatus.isLimited;
-    final locationGranted =
-        locationStatus.isGranted || locationStatus.isLimited;
-
-    return (cameraGranted: cameraGranted, locationGranted: locationGranted);
+  bool _isLocationGranted(PermissionStatus status) {
+    return status.isGranted || status.isLimited;
   }
 
-  Future<({bool cameraGranted, bool locationGranted})>
-  _resolvePermissionStatus() async {
+  Future<bool> _resolveLocationPermissionStatus() async {
     try {
-      final cameraStatus = await Permission.camera.status;
       final locationStatus = await Permission.locationWhenInUse.status;
-
-      return _mapPermissionStatus(
-        cameraStatus: cameraStatus,
-        locationStatus: locationStatus,
-      );
+      return _isLocationGranted(locationStatus);
     } catch (_) {
-      return (cameraGranted: false, locationGranted: false);
+      return false;
     }
   }
 

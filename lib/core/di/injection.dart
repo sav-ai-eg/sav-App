@@ -13,6 +13,8 @@ import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/services/trip_live_updates_service.dart';
 import 'package:sav/core/services/trip_navigation_service.dart';
+import 'package:sav/core/services/alert_service.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 import 'package:sav/core/di/injection.config.dart';
 import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source.dart';
 import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source_impl.dart';
@@ -44,6 +46,9 @@ import 'package:sav/features/home/domain/repositories/home_repository.dart';
 import 'package:sav/features/home/domain/usecases/load_home_dashboard_use_case.dart';
 import 'package:sav/features/home/domain/usecases/load_home_duty_for_month_use_case.dart';
 import 'package:sav/features/home/presentation/cubit/home_cubit.dart';
+import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_stats_use_case.dart';
+import 'package:sav/features/trip/domain/usecases/load_esp_telemetry_use_case.dart';
 
 final getIt = GetIt.instance;
 @InjectableInit()
@@ -167,6 +172,16 @@ Future<void> configureDependencies() async {
       () => BackendApiService(apiConsumer: getIt<ApiConsumer>()),
     );
   }
+  if (!getIt.isRegistered<LoadEspTelemetryUseCase>()) {
+    getIt.registerLazySingleton<LoadEspTelemetryUseCase>(
+      () => LoadEspTelemetryUseCase(getIt<TripRepository>()),
+    );
+  }
+  if (!getIt.isRegistered<LoadEspTelemetryStatsUseCase>()) {
+    getIt.registerLazySingleton<LoadEspTelemetryStatsUseCase>(
+      () => LoadEspTelemetryStatsUseCase(getIt<TripRepository>()),
+    );
+  }
   if (!getIt.isRegistered<ChatRemoteDataSource>()) {
     getIt.registerLazySingleton<ChatRemoteDataSource>(
       () => ChatRemoteDataSourceImpl(getIt<ApiConsumer>()),
@@ -244,6 +259,16 @@ Future<void> configureDependencies() async {
       () => HomeCubit(
         getIt<LoadHomeDashboardUseCase>(),
         getIt<LoadHomeDutyForMonthUseCase>(),
+      ),
+    );
+  }
+
+  if (!getIt.isRegistered<PushNotificationService>()) {
+    getIt.registerLazySingleton<PushNotificationService>(
+      () => PushNotificationService(
+        getIt<BackendApiService>(),
+        getIt<SharedPreferences>(),
+        getIt<AlertService>(),
       ),
     );
   }

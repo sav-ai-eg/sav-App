@@ -13,6 +13,11 @@ class TripInitial extends TripState {
   const TripInitial();
 }
 
+class TripAssignedLoaded extends TripState {
+  final List<TripEntity> trips;
+  const TripAssignedLoaded(this.trips);
+}
+
 class TripLoading extends TripState {
   final String title;
   final String message;
@@ -35,7 +40,6 @@ class TripActive extends TripState {
   final double? longitude;
   final double totalDistanceMeters;
   final bool isAiReady;
-  final bool isCameraReady;
   final bool isOnline;
   final int pendingSyncCount;
   final bool isActionInProgress;
@@ -51,7 +55,6 @@ class TripActive extends TripState {
     this.longitude,
     this.totalDistanceMeters = 0,
     this.isAiReady = false,
-    this.isCameraReady = false,
     this.isOnline = true,
     this.pendingSyncCount = 0,
     this.isActionInProgress = false,
@@ -68,7 +71,6 @@ class TripActive extends TripState {
     double? longitude,
     double? totalDistanceMeters,
     bool? isAiReady,
-    bool? isCameraReady,
     bool? isOnline,
     int? pendingSyncCount,
     bool? isActionInProgress,
@@ -84,7 +86,6 @@ class TripActive extends TripState {
       longitude: longitude ?? this.longitude,
       totalDistanceMeters: totalDistanceMeters ?? this.totalDistanceMeters,
       isAiReady: isAiReady ?? this.isAiReady,
-      isCameraReady: isCameraReady ?? this.isCameraReady,
       isOnline: isOnline ?? this.isOnline,
       pendingSyncCount: pendingSyncCount ?? this.pendingSyncCount,
       isActionInProgress: isActionInProgress ?? this.isActionInProgress,
@@ -104,7 +105,7 @@ class TripActive extends TripState {
 
 /// Transient state emitted briefly when a danger alert occurs.
 class TripDangerAlert extends TripState {
-  final String alertType; // 'drowsiness' or 'yawn'
+  final String alertType; // e.g. drowsiness, yawning, no_face
   final double confidence;
   final TripActive activeState; // the underlying active state
 

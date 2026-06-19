@@ -5,14 +5,26 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sav/core/constants/app_assets.dart';
 import 'package:sav/core/constants/app_colors.dart';
 import 'package:sav/features/auth/data/models/driver_model.dart';
+import 'package:sav/features/settings/data/models/vehicle_info.dart';
 
 class VehicleInfoCard extends StatelessWidget {
   final DriverModel driver;
+  final VehicleInfo? vehicle;
 
-  const VehicleInfoCard({super.key, required this.driver});
+  const VehicleInfoCard({super.key, required this.driver, this.vehicle});
 
   @override
   Widget build(BuildContext context) {
+    final plate = vehicle?.plateNumber ?? driver.vehiclePlate;
+    final model = vehicle?.modelName ?? '';
+    final status = vehicle?.statusLabel ?? '';
+    final mileage = vehicle?.mileageKm ?? 0;
+    final company = driver.companyName?.trim() ?? '';
+    final secondaryLabel = model.isNotEmpty ? 'Model :' : 'Company :';
+    final secondaryValue = model.isNotEmpty
+        ? model
+        : (company.isNotEmpty ? company : '—');
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
@@ -51,17 +63,21 @@ class VehicleInfoCard extends StatelessWidget {
               children: [
                 _VehicleRow(
                   label: 'Plate :',
-                  value: driver.vehiclePlate.isNotEmpty
-                      ? driver.vehiclePlate
-                      : '—',
+                  value: plate.isNotEmpty ? plate : '—',
                 ),
                 SizedBox(height: 8.h),
                 _VehicleRow(
-                  label: 'Company :',
-                  value: driver.companyName?.isNotEmpty == true
-                      ? driver.companyName!
-                      : '—',
+                  label: secondaryLabel,
+                  value: secondaryValue,
                 ),
+                if (status.isNotEmpty) ...[
+                  SizedBox(height: 8.h),
+                  _VehicleRow(label: 'Status :', value: status),
+                ],
+                if (mileage > 0) ...[
+                  SizedBox(height: 8.h),
+                  _VehicleRow(label: 'Mileage :', value: '$mileage KM'),
+                ],
               ],
             ),
           ),

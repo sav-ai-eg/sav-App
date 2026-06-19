@@ -14,7 +14,6 @@ import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/google_places_service.dart';
 import 'package:sav/core/services/location_service.dart';
 import 'package:sav/core/services/permission_service.dart';
-import 'package:sav/core/services/tflite_detection_service.dart';
 import 'package:sav/core/widgets/sav_button.dart';
 import 'package:sav/core/widgets/sav_components.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
@@ -41,7 +40,6 @@ class _StartTripFormState extends State<StartTripForm> {
   final _connectivityService = getIt<ConnectivityService>();
   final _locationService = getIt<LocationService>();
   final _directionsService = getIt<GoogleDirectionsService>();
-  final _detectionService = getIt<TfliteDetectionService>();
 
   Timer? _fromDebounce;
   Timer? _toDebounce;
@@ -99,7 +97,7 @@ class _StartTripFormState extends State<StartTripForm> {
                         SizedBox(height: 12.h),
                         _TripAlertsCard(
                           isOnline: _connectivityService.isOnline,
-                          isAiReady: _detectionService.isInitialized,
+                          isDeviceReady: _connectivityService.isOnline,
                         ),
                         SizedBox(height: 20.h),
                       ],
@@ -157,9 +155,9 @@ class _StartTripFormState extends State<StartTripForm> {
                       _connectivityService.isOnline) ...[
                     SizedBox(height: 12.h),
                     _InfoBanner(
-                      text: 'Search is temporarily unavailable',
+                      text: _placesError!,
                       color: AppColors.warningColor,
-                      icon: Icons.wifi_off_rounded,
+                      icon: Icons.error_outline_rounded,
                     ),
                   ],
                   if (!AppConstants.hasGoogleMapsApiKey) ...[
@@ -326,13 +324,13 @@ class _StartTripFormState extends State<StartTripForm> {
           _isSearchingTo = false;
         }
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _placesError = 'Search unavailable';
+        _placesError = e is Exception ? e.toString().replaceAll('Exception: ', '') : 'Search unavailable';
         if (isFromField) {
           _fromSuggestions = const [];
           _isSearchingFrom = false;
@@ -478,14 +476,14 @@ class _StartTripFormState extends State<StartTripForm> {
 
     setState(() => _isSubmitting = true);
 
-    final permissions = await PermissionService.requestAll(context);
+    final locationGranted = await PermissionService.requestLocation(context);
     if (!mounted) {
       return;
     }
 
-    if (!permissions.camera || !permissions.location) {
+    if (!locationGranted) {
       setState(() => _isSubmitting = false);
-      SavDialog.showError(context, 'Camera and location are required.');
+      SavDialog.showError(context, 'Location permission is required.');
       return;
     }
 
@@ -520,9 +518,9 @@ class _TripSectionTitle extends StatelessWidget {
 
 class _TripAlertsCard extends StatelessWidget {
   final bool isOnline;
-  final bool isAiReady;
+  final bool isDeviceReady;
 
-  const _TripAlertsCard({required this.isOnline, required this.isAiReady});
+  const _TripAlertsCard({required this.isOnline, required this.isDeviceReady});
 
   @override
   Widget build(BuildContext context) {
@@ -575,9 +573,9 @@ class _TripAlertsCard extends StatelessWidget {
               SizedBox(width: 10.w),
               Expanded(
                 child: _StatusChip(
-                  label: isAiReady ? 'AI Ready' : 'AI Standby',
-                  icon: Icons.psychology_rounded,
-                  color: isAiReady
+                  label: isDeviceReady ? 'ESP Ready' : 'ESP Standby',
+                  icon: Icons.sensors_rounded,
+                  color: isDeviceReady
                       ? AppColors.successColor
                       : AppColors.secondaryColor,
                 ),

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sav/core/di/injection.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 import 'package:sav/features/common/chat/data/models/chat_message.dart';
 import 'package:sav/features/common/chat/domain/entities/chat_message_entity.dart';
 import 'package:sav/features/common/chat/domain/usecases/bootstrap_chat_conversation_use_case.dart';
@@ -32,6 +34,23 @@ class FeedbackChatCubit extends Cubit<FeedbackChatState> {
            getIt<MarkChatConversationReadUseCase>(),
        super(FeedbackChatState.initial()) {
     _openInitialConversation();
+    _chatSubscription = PushNotificationService.chatMessageStream.listen((data) {
+      final convId = data['conversation_id'];
+      if (convId != null) {
+        final parsedId = int.tryParse(convId.toString());
+        if (parsedId != null && parsedId == state.conversationId) {
+          _loadConversationMessages(parsedId);
+        }
+      }
+    });
+  }
+
+  StreamSubscription<Map<String, dynamic>>? _chatSubscription;
+
+  @override
+  Future<void> close() {
+    _chatSubscription?.cancel();
+    return super.close();
   }
 
   factory FeedbackChatCubit.full() {

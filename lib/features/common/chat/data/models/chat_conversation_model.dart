@@ -12,15 +12,24 @@ class ChatConversationModel extends ChatConversationEntity {
     required super.lastMessageAt,
     required super.createdAt,
     required super.updatedAt,
+    super.chatPartner,
   });
 
   factory ChatConversationModel.fromBackendMap(Map<String, dynamic> map) {
     final driverPayload = map['driver'];
     final lastMessagePayload = map['last_message'];
+    final chatPartnerPayload = map['chat_partner'] ?? map['chatPartner'];
+
     final driver = driverPayload is Map<String, dynamic>
         ? AuthUserModel.fromMap(driverPayload)
         : driverPayload is Map
         ? AuthUserModel.fromMap(Map<String, dynamic>.from(driverPayload))
+        : null;
+
+    final chatPartner = chatPartnerPayload is Map<String, dynamic>
+        ? AuthUserModel.fromMap(chatPartnerPayload)
+        : chatPartnerPayload is Map
+        ? AuthUserModel.fromMap(Map<String, dynamic>.from(chatPartnerPayload))
         : null;
 
     return ChatConversationModel(
@@ -31,6 +40,7 @@ class ChatConversationModel extends ChatConversationEntity {
             (driverPayload is Map ? driverPayload['id'] : driverPayload),
       ),
       driver: driver,
+      chatPartner: chatPartner,
       unreadCount: _toInt(map['unread_count'] ?? map['unreadCount']),
       lastMessage: lastMessagePayload is Map<String, dynamic>
           ? ChatMessageModel.fromBackendMap(lastMessagePayload)

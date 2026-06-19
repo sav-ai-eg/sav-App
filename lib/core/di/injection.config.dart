@@ -16,6 +16,7 @@ import 'package:sav/core/di/app_module.dart' as _i1050;
 import 'package:sav/core/network/api_consumer.dart' as _i741;
 import 'package:sav/core/network/dio_api_consumer.dart' as _i541;
 import 'package:sav/core/services/alert_service.dart' as _i5;
+import 'package:sav/core/services/auth_session_storage.dart' as _i741;
 import 'package:sav/core/services/camera_service.dart' as _i155;
 import 'package:sav/core/services/connectivity_service.dart' as _i441;
 import 'package:sav/core/services/firestore_service.dart' as _i811;
@@ -24,6 +25,26 @@ import 'package:sav/core/services/offline_cache_service.dart' as _i789;
 import 'package:sav/core/services/tflite_detection_service.dart' as _i813;
 import 'package:sav/features/auth/presentation/cubit/driver_data_cubit.dart'
     as _i497;
+import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source.dart'
+    as _i701;
+import 'package:sav/features/common/chat/data/datasources/chat_remote_data_source_impl.dart'
+    as _i41;
+import 'package:sav/features/common/chat/data/repositories/chat_repository_impl.dart'
+    as _i545;
+import 'package:sav/features/common/chat/domain/repositories/chat_repository.dart'
+    as _i578;
+import 'package:sav/features/common/chat/domain/usecases/bootstrap_chat_conversation_use_case.dart'
+    as _i596;
+import 'package:sav/features/common/chat/domain/usecases/load_chat_conversations_use_case.dart'
+    as _i943;
+import 'package:sav/features/common/chat/domain/usecases/load_chat_messages_use_case.dart'
+    as _i464;
+import 'package:sav/features/common/chat/domain/usecases/load_chat_unread_summary_use_case.dart'
+    as _i1006;
+import 'package:sav/features/common/chat/domain/usecases/mark_chat_conversation_read_use_case.dart'
+    as _i424;
+import 'package:sav/features/common/chat/domain/usecases/send_chat_message_use_case.dart'
+    as _i944;
 import 'package:sav/features/emergency/presentation/cubit/emergency_cubit.dart'
     as _i116;
 import 'package:sav/features/history/presentation/cubit/history_cubit.dart'
@@ -71,6 +92,8 @@ import 'package:sav/features/trip/domain/usecases/push_trip_location_use_case.da
     as _i897;
 import 'package:sav/features/trip/domain/usecases/resume_trip_use_case.dart'
     as _i748;
+import 'package:sav/features/trip/domain/usecases/start_existing_trip_use_case.dart'
+    as _i702;
 import 'package:sav/features/trip/domain/usecases/start_trip_use_case.dart'
     as _i872;
 import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart'
@@ -104,6 +127,13 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i813.TfliteDetectionService>(
       () => _i813.TfliteDetectionService(),
     );
+    gh.lazySingleton<_i741.ApiConsumer>(
+      () => _i541.DioApiConsumer(
+        gh<_i361.Dio>(),
+        gh<_i460.SharedPreferences>(),
+        gh<_i741.AuthSessionStorage>(),
+      ),
+    );
     gh.factory<_i116.EmergencyCubit>(
       () => _i116.EmergencyCubit(
         gh<_i811.FirestoreService>(),
@@ -118,15 +148,14 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i460.SharedPreferences>(),
       ),
     );
-    gh.factory<_i265.SplashCubit>(
-      () => _i265.SplashCubit(gh<_i460.SharedPreferences>()),
-    );
     gh.factory<_i123.HomeLocalDataSource>(
       () => _i361.HomeLocalDataSourceImpl(gh<_i460.SharedPreferences>()),
     );
-    gh.lazySingleton<_i741.ApiConsumer>(
-      () =>
-          _i541.DioApiConsumer(gh<_i361.Dio>(), gh<_i460.SharedPreferences>()),
+    gh.factory<_i265.SplashCubit>(
+      () => _i265.SplashCubit(
+        gh<_i460.SharedPreferences>(),
+        gh<_i741.AuthSessionStorage>(),
+      ),
     );
     gh.factory<_i799.HomeRemoteDataSource>(
       () => _i442.HomeRemoteDataSourceImpl(gh<_i741.ApiConsumer>()),
@@ -134,8 +163,14 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i64.TripRemoteDataSource>(
       () => _i841.TripRemoteDataSourceImpl(gh<_i741.ApiConsumer>()),
     );
+    gh.lazySingleton<_i701.ChatRemoteDataSource>(
+      () => _i41.ChatRemoteDataSourceImpl(gh<_i741.ApiConsumer>()),
+    );
     gh.factory<_i389.TripRepository>(
       () => _i786.TripRepositoryImpl(gh<_i64.TripRemoteDataSource>()),
+    );
+    gh.lazySingleton<_i578.ChatRepository>(
+      () => _i545.ChatRepositoryImpl(gh<_i701.ChatRemoteDataSource>()),
     );
     gh.factory<_i68.HomeRepository>(
       () => _i540.HomeRepositoryImpl(
@@ -169,6 +204,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.factory<_i748.ResumeTripUseCase>(
       () => _i748.ResumeTripUseCase(gh<_i389.TripRepository>()),
     );
+    gh.factory<_i702.StartExistingTripUseCase>(
+      () => _i702.StartExistingTripUseCase(gh<_i389.TripRepository>()),
+    );
     gh.factory<_i872.StartTripUseCase>(
       () => _i872.StartTripUseCase(gh<_i389.TripRepository>()),
     );
@@ -182,16 +220,12 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i441.ConnectivityService>(),
       ),
     );
-    gh.factory<_i193.LoadHomeDashboardUseCase>(
-      () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),
-    );
-    gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
-      () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
-    );
-    gh.factory<_i138.TripCubit>(
+    gh.lazySingleton<_i138.TripCubit>(
       () => _i138.TripCubit(
         gh<_i872.StartTripUseCase>(),
+        gh<_i702.StartExistingTripUseCase>(),
         gh<_i324.LoadCurrentTripUseCase>(),
+        gh<_i364.LoadDriverTripHistoryUseCase>(),
         gh<_i897.PushTripLocationUseCase>(),
         gh<_i133.StopTripUseCase>(),
         gh<_i748.ResumeTripUseCase>(),
@@ -199,13 +233,35 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i669.CancelTripUseCase>(),
         gh<_i141.LoadTripEventsUseCase>(),
         gh<_i537.CreateTripAlertUseCase>(),
-        gh<_i813.TfliteDetectionService>(),
-        gh<_i155.CameraService>(),
         gh<_i176.LocationService>(),
         gh<_i5.AlertService>(),
         gh<_i789.OfflineCacheService>(),
         gh<_i441.ConnectivityService>(),
       ),
+    );
+    gh.factory<_i193.LoadHomeDashboardUseCase>(
+      () => _i193.LoadHomeDashboardUseCase(gh<_i68.HomeRepository>()),
+    );
+    gh.factory<_i1068.LoadHomeDutyForMonthUseCase>(
+      () => _i1068.LoadHomeDutyForMonthUseCase(gh<_i68.HomeRepository>()),
+    );
+    gh.factory<_i596.BootstrapChatConversationUseCase>(
+      () => _i596.BootstrapChatConversationUseCase(gh<_i578.ChatRepository>()),
+    );
+    gh.factory<_i943.LoadChatConversationsUseCase>(
+      () => _i943.LoadChatConversationsUseCase(gh<_i578.ChatRepository>()),
+    );
+    gh.factory<_i464.LoadChatMessagesUseCase>(
+      () => _i464.LoadChatMessagesUseCase(gh<_i578.ChatRepository>()),
+    );
+    gh.factory<_i1006.LoadChatUnreadSummaryUseCase>(
+      () => _i1006.LoadChatUnreadSummaryUseCase(gh<_i578.ChatRepository>()),
+    );
+    gh.factory<_i424.MarkChatConversationReadUseCase>(
+      () => _i424.MarkChatConversationReadUseCase(gh<_i578.ChatRepository>()),
+    );
+    gh.factory<_i944.SendChatMessageUseCase>(
+      () => _i944.SendChatMessageUseCase(gh<_i578.ChatRepository>()),
     );
     gh.factory<_i727.HomeCubit>(
       () => _i727.HomeCubit(

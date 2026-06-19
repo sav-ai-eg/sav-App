@@ -90,10 +90,8 @@ class PermissionService {
   /// Returns a record of (camera: bool, location: bool).
   static Future<({bool camera, bool location})> requestAll(
       BuildContext context) async {
-    final camera = await requestCamera(context);
-    if (!context.mounted) return (camera: camera, location: false);
     final location = await requestLocation(context);
-    return (camera: camera, location: location);
+    return (camera: false, location: location);
   }
 
   // ─── Private: Settings Dialog ──────────────────────────────

@@ -1,4 +1,5 @@
 import 'package:sav/features/auth/data/models/driver_model.dart';
+import 'package:sav/features/settings/data/models/vehicle_info.dart';
 
 abstract class SettingsState {
   const SettingsState();
@@ -14,11 +15,12 @@ class SettingsLoading extends SettingsState {
 
 class SettingsLoaded extends SettingsState {
   final DriverModel driver;
+  final VehicleInfo? vehicle;
   final bool alertSoundEnabled;
+  final String selectedAlertSound;
   final bool vibrationEnabled;
   final bool notificationsEnabled;
   final int detectionIntervalMs;
-  final bool cameraPermissionGranted;
   final bool locationPermissionGranted;
   final String username;
   final String role;
@@ -27,11 +29,12 @@ class SettingsLoaded extends SettingsState {
 
   const SettingsLoaded({
     required this.driver,
+    this.vehicle,
     required this.alertSoundEnabled,
+    required this.selectedAlertSound,
     required this.vibrationEnabled,
     required this.notificationsEnabled,
     required this.detectionIntervalMs,
-    required this.cameraPermissionGranted,
     required this.locationPermissionGranted,
     required this.username,
     required this.role,
@@ -41,11 +44,12 @@ class SettingsLoaded extends SettingsState {
 
   SettingsLoaded copyWith({
     DriverModel? driver,
+    VehicleInfo? vehicle,
     bool? alertSoundEnabled,
+    String? selectedAlertSound,
     bool? vibrationEnabled,
     bool? notificationsEnabled,
     int? detectionIntervalMs,
-    bool? cameraPermissionGranted,
     bool? locationPermissionGranted,
     String? username,
     String? role,
@@ -54,12 +58,12 @@ class SettingsLoaded extends SettingsState {
   }) {
     return SettingsLoaded(
       driver: driver ?? this.driver,
+      vehicle: vehicle ?? this.vehicle,
       alertSoundEnabled: alertSoundEnabled ?? this.alertSoundEnabled,
+      selectedAlertSound: selectedAlertSound ?? this.selectedAlertSound,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       detectionIntervalMs: detectionIntervalMs ?? this.detectionIntervalMs,
-      cameraPermissionGranted:
-          cameraPermissionGranted ?? this.cameraPermissionGranted,
       locationPermissionGranted:
           locationPermissionGranted ?? this.locationPermissionGranted,
       username: username ?? this.username,

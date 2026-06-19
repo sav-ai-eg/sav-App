@@ -1,7 +1,10 @@
 import 'package:dartz/dartz.dart';
 import 'package:sav/core/errors/failures.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/entities/alert_entity.dart';
 
 abstract class TripRepository {
   Future<Either<Failure, TripEntity>> startTrip({
@@ -9,6 +12,12 @@ abstract class TripRepository {
     required String destinationAddress,
     required double startLatitude,
     required double startLongitude,
+  });
+
+  Future<Either<Failure, TripEntity>> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
   });
 
   Future<Either<Failure, TripEntity?>> loadCurrentTrip();
@@ -65,5 +74,22 @@ abstract class TripRepository {
   Future<Either<Failure, Unit>> createTripAlert({
     required int tripId,
     required String alertType,
+  });
+
+  Future<Either<Failure, List<EspTelemetryLogEntity>>> loadEspTelemetry({
+    int page = 1,
+    int pageSize = 1,
+    int? tripId,
+    String? deviceUid,
+    bool? alertOnly,
+  });
+
+  Future<Either<Failure, EspTelemetryStatsEntity>> loadEspTelemetryStats({
+    int? tripId,
+    String? deviceUid,
+  });
+
+  Future<Either<Failure, List<AlertEntity>>> loadTripAlerts({
+    required int tripId,
   });
 }

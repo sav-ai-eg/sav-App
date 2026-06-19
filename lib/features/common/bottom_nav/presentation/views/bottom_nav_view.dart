@@ -10,6 +10,7 @@ import 'package:sav/features/home/presentation/views/home_view.dart';
 import 'package:sav/features/settings/presentation/views/settings_view.dart';
 import 'package:sav/features/trip/presentation/cubit/trip_cubit.dart';
 import 'package:sav/features/trip/presentation/views/trip_view.dart';
+import 'package:sav/core/services/push_notification_service.dart';
 
 class BottomNavView extends StatefulWidget {
   const BottomNavView({super.key});
@@ -19,32 +20,36 @@ class BottomNavView extends StatefulWidget {
 }
 
 class _BottomNavViewState extends State<BottomNavView> {
-  late final TripCubit _tripCubit;
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-    _tripCubit = getIt<TripCubit>();
-    _pages = [
-      const HomeView(),
-      const HistoryView(),
-      BlocProvider.value(value: _tripCubit, child: const TripView()),
-      const SettingsView(),
+    _pages = const [
+      HomeView(),
+      HistoryView(),
+      TripView(),
+      SettingsView(),
     ];
+    // Initialize push notifications
+    getIt<PushNotificationService>().initialize();
   }
 
   @override
   void dispose() {
-    _tripCubit.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<BottomNavCubit, BottomNavState>(
-      builder: (context, state) {
-        final cubit = context.read<BottomNavCubit>();
+    return BlocListener<TripCubit, TripState>(
+      listenWhen: (previous, current) => previous is! TripActive && current is TripActive,
+      listener: (context, state) {
+        context.read<BottomNavCubit>().changeIndex(index: 2);
+      },
+      child: BlocBuilder<BottomNavCubit, BottomNavState>(
+        builder: (context, state) {
+          final cubit = context.read<BottomNavCubit>();
         final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
         final shouldHideNav = state.hideNavBar || keyboardVisible;
 
@@ -105,6 +110,7 @@ class _BottomNavViewState extends State<BottomNavView> {
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 }

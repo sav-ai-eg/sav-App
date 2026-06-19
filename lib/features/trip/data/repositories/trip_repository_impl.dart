@@ -3,8 +3,11 @@ import 'package:injectable/injectable.dart';
 import 'package:sav/core/errors/exceptions.dart';
 import 'package:sav/core/errors/failures.dart';
 import 'package:sav/features/trip/data/datasources/trip_remote_data_source.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_log_entity.dart';
+import 'package:sav/features/trip/domain/entities/esp_telemetry_stats_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_entity.dart';
 import 'package:sav/features/trip/domain/entities/trip_event_entity.dart';
+import 'package:sav/features/trip/domain/entities/alert_entity.dart';
 import 'package:sav/features/trip/domain/repositories/trip_repository.dart';
 
 @Injectable(as: TripRepository)
@@ -26,6 +29,29 @@ class TripRepositoryImpl implements TripRepository {
         destinationAddress: destinationAddress,
         startLatitude: startLatitude,
         startLongitude: startLongitude,
+      );
+
+      return Right<Failure, TripEntity>(trip);
+    } on AppException catch (exception) {
+      return Left<Failure, TripEntity>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, TripEntity>(
+        ApiFailure('Unable to start trip right now. Please try again.'),
+      );
+    }
+  }
+
+  @override
+  Future<Either<Failure, TripEntity>> startExistingTrip({
+    required int tripId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final trip = await _remoteDataSource.startExistingTrip(
+        tripId: tripId,
+        latitude: latitude,
+        longitude: longitude,
       );
 
       return Right<Failure, TripEntity>(trip);
@@ -243,6 +269,52 @@ class TripRepositoryImpl implements TripRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, List<EspTelemetryLogEntity>>> loadEspTelemetry({
+    int page = 1,
+    int pageSize = 1,
+    int? tripId,
+    String? deviceUid,
+    bool? alertOnly,
+  }) async {
+    try {
+      final logs = await _remoteDataSource.loadEspTelemetry(
+        page: page,
+        pageSize: pageSize,
+        tripId: tripId,
+        deviceUid: deviceUid,
+        alertOnly: alertOnly,
+      );
+      return Right<Failure, List<EspTelemetryLogEntity>>(logs);
+    } on AppException catch (exception) {
+      return Left<Failure, List<EspTelemetryLogEntity>>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, List<EspTelemetryLogEntity>>(
+        ApiFailure('Unable to load ESP telemetry right now.'),
+      );
+    }
+  }
+
+  @override
+  Future<Either<Failure, EspTelemetryStatsEntity>> loadEspTelemetryStats({
+    int? tripId,
+    String? deviceUid,
+  }) async {
+    try {
+      final stats = await _remoteDataSource.loadEspTelemetryStats(
+        tripId: tripId,
+        deviceUid: deviceUid,
+      );
+      return Right<Failure, EspTelemetryStatsEntity>(stats);
+    } on AppException catch (exception) {
+      return Left<Failure, EspTelemetryStatsEntity>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, EspTelemetryStatsEntity>(
+        ApiFailure('Unable to load ESP telemetry stats right now.'),
+      );
+    }
+  }
+
   Failure _mapFailure(AppException exception) {
     if (exception is UnauthorizedException) {
       return const ApiFailure('Session expired. Please login again.');
@@ -283,6 +355,22 @@ class TripRepositoryImpl implements TripRepository {
         return normalized;
       default:
         return 'no_face';
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<AlertEntity>>> loadTripAlerts({
+    required int tripId,
+  }) async {
+    try {
+      final alerts = await _remoteDataSource.loadTripAlerts(tripId: tripId);
+      return Right<Failure, List<AlertEntity>>(alerts);
+    } on AppException catch (exception) {
+      return Left<Failure, List<AlertEntity>>(_mapFailure(exception));
+    } catch (_) {
+      return const Left<Failure, List<AlertEntity>>(
+        ApiFailure('Unable to load trip alerts right now.'),
+      );
     }
   }
 }
