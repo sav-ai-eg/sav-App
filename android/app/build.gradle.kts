@@ -9,7 +9,7 @@ plugins {
 android {
     namespace = "com.example.sav"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "27.3.13750724"
 
     // Prevent Android from compressing TFLite models (required by tflite_flutter)
     aaptOptions {
