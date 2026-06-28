@@ -8,8 +8,32 @@ import 'package:sav/core/constants/app_constants.dart';
 /// Manages alert sounds and vibration for drowsiness / yawn warnings.
 @lazySingleton
 class AlertService {
+  AlertService() {
+    _initializeAudioContext();
+  }
+
   final AudioPlayer _player = AudioPlayer();
-  bool _isPlaying = false;
+  String? _currentAlertType;
+
+  Future<void> _initializeAudioContext() async {
+    try {
+      await _player.setAudioContext(AudioContext(
+        android: AudioContextAndroid(
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media, // Route to media stream for high reliability
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: {
+            AVAudioSessionOptions.defaultToSpeaker,
+          },
+        ),
+      ));
+    } catch (e) {
+      debugPrint('AlertService constructor audio context error: $e');
+    }
+  }
 
   // ─── Play Alerts ────────────────────────────────────────────
 
@@ -25,50 +49,30 @@ class AlertService {
       _vibrate(duration: 1000);
     }
 
-    if (soundEnabled && !_isPlaying) {
-      _isPlaying = true;
+    if (soundEnabled) {
+      if (_currentAlertType == 'drowsiness') {
+        // Already playing the drowsiness loop - do not restart to avoid stuttering!
+        return;
+      }
+
+      // Interrupt any other active alarm immediately
       try {
-        await _player.setAudioContext(AudioContext(
-          android: AudioContextAndroid(
-            contentType: AndroidContentType.sonification,
-            usageType: AndroidUsageType.alarm,
-            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-          ),
-          iOS: AudioContextIOS(
-            category: AVAudioSessionCategory.playback,
-            options: {
-              AVAudioSessionOptions.defaultToSpeaker,
-            },
-          ),
-        ));
+        await _player.stop();
+      } catch (_) {}
+
+      _currentAlertType = 'drowsiness';
+
+      try {
         await _player.setVolume(1.0);
+        await _player.setReleaseMode(ReleaseMode.loop); // Enable native looping for critical alarms
+        
         final selectedSound =
-            prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'trucksound.wav';
-        // Try custom selected asset first, then fallback to standard alert, then system alarm
-        try {
-          await _player.play(AssetSource('sounds/$selectedSound'));
-        } catch (_) {
-          try {
-            await _player.play(AssetSource('sounds/alert.wav'));
-          } catch (_) {
-            // Fallback: Android system alarm sound
-            await _player.play(UrlSource(
-              'content://settings/system/alarm_alert',
-            ));
-          }
-        }
-        // Release isPlaying state once sound completes or after 4 seconds safety timeout
-        Future.any<dynamic>([
-          _player.onPlayerComplete.first,
-          Future<void>.delayed(const Duration(seconds: 4)),
-        ]).then((_) {
-          _isPlaying = false;
-        }).catchError((_) {
-          _isPlaying = false;
-        });
+            prefs.getString(AppConstants.prefSelectedAlertSound) ?? 'alarm.wav';
+        debugPrint('AlertService: playing looping asset sounds/$selectedSound');
+        await _player.play(AssetSource('sounds/$selectedSound'));
       } catch (e) {
         debugPrint('AlertService.playDrowsinessAlert error: $e');
-        _isPlaying = false;
+        _currentAlertType = null;
         // Last resort: vibrate heavily
         if (vibrationEnabled) _vibrate(duration: 2000);
       }
@@ -87,43 +91,42 @@ class AlertService {
       _vibrate(duration: 500);
     }
 
-    if (soundEnabled && !_isPlaying) {
-      _isPlaying = true;
+    if (soundEnabled) {
+      if (_currentAlertType == 'yawn') {
+        // Already playing a yawn sound - do not restart to avoid stuttering!
+        return;
+      }
+
+      // Interrupt any other active alarm immediately
       try {
-        await _player.setAudioContext(AudioContext(
-          android: AudioContextAndroid(
-            contentType: AndroidContentType.sonification,
-            usageType: AndroidUsageType.alarm,
-            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-          ),
-          iOS: AudioContextIOS(
-            category: AVAudioSessionCategory.playback,
-            options: {
-              AVAudioSessionOptions.defaultToSpeaker,
-            },
-          ),
-        ));
+        await _player.stop();
+      } catch (_) {}
+
+      _currentAlertType = 'yawn';
+
+      try {
         await _player.setVolume(0.7);
-        try {
-          await _player.play(AssetSource('sounds/warning.wav'));
-        } catch (_) {
-          // Fallback: Android system notification sound
-          await _player.play(UrlSource(
-            'content://settings/system/notification_sound',
-          ));
-        }
-        // Release isPlaying state once sound completes or after 3 seconds safety timeout
+        await _player.setReleaseMode(ReleaseMode.release); // Do not loop for softer yawn warnings
+        
+        debugPrint('AlertService: playing asset sounds/warning.wav');
+        await _player.play(AssetSource('sounds/warning.wav'));
+        
+        // Release alert state once sound completes or after 3 seconds safety timeout
         Future.any<dynamic>([
           _player.onPlayerComplete.first,
           Future<void>.delayed(const Duration(seconds: 3)),
         ]).then((_) {
-          _isPlaying = false;
+          if (_currentAlertType == 'yawn') {
+            _currentAlertType = null;
+          }
         }).catchError((_) {
-          _isPlaying = false;
+          if (_currentAlertType == 'yawn') {
+            _currentAlertType = null;
+          }
         });
       } catch (e) {
         debugPrint('AlertService.playYawnWarning error: $e');
-        _isPlaying = false;
+        _currentAlertType = null;
         if (vibrationEnabled) _vibrate(duration: 500);
       }
     }
@@ -144,8 +147,9 @@ class AlertService {
 
   Future<void> stop() async {
     try {
+      await _player.setReleaseMode(ReleaseMode.release); // Reset release mode from loop
       await _player.stop();
-      _isPlaying = false;
+      _currentAlertType = null;
     } catch (_) {}
   }
 

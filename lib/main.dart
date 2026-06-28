@@ -10,7 +10,7 @@ import 'package:sav/core/services/offline_cache_service.dart';
 import 'package:sav/core/util/routing/app_router.dart';
 import 'package:sav/firebase_options.dart';
 import 'package:sav/sav_app.dart';
-void main() async {
+void main() async { 
   runZonedGuarded<Future<void>>(
     () async {
       WidgetsFlutterBinding.ensureInitialized();

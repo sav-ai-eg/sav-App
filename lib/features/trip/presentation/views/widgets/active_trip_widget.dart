@@ -8,7 +8,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:camera/camera.dart';
 import 'package:sav/core/constants/app_colors.dart';
+import 'package:sav/core/services/camera_service.dart';
 import 'package:sav/core/services/google_directions_service.dart';
 import 'package:sav/core/services/trip_navigation_service.dart';
 import 'package:sav/core/widgets/sav_dialog.dart';
@@ -297,6 +299,27 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
                 _routeData?.durationText,
             hasLiveRoute: _routeData?.hasPath ?? false,
             routeLoading: _isRouteLoading,
+          ),
+        ),
+        Positioned(
+          right: 16.w,
+          bottom: 380.h,
+          child: Container(
+            width: 100.w,
+            height: 130.h,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(16.r),
+              border: Border.all(color: AppColors.primaryColor, width: 2.w),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: _buildCameraPreview(context),
           ),
         ),
         if (widget.dangerAlert != null)
@@ -696,6 +719,77 @@ class _ActiveTripWidgetState extends State<ActiveTripWidget>
       southwest: LatLng(minLat, minLng),
       northeast: LatLng(maxLat, maxLng),
     );
+  }
+
+  Widget _buildCameraPreview(BuildContext context) {
+    try {
+      final tripCubit = context.read<TripCubit>();
+      if (!tripCubit.useLocalAiMode) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.sensors_rounded,
+                color: AppColors.primaryColor,
+                size: 28.sp,
+              ),
+              SizedBox(height: 6.h),
+              Text(
+                'ESP-AI Active',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      final cameraService = GetIt.instance<CameraService>();
+      if (!cameraService.isInitialized || cameraService.controller == null) {
+        return const Center(
+          child: Icon(
+            Icons.videocam_off_rounded,
+            color: Colors.white70,
+            size: 24,
+          ),
+        );
+      }
+
+      final controller = cameraService.controller!;
+      if (!controller.value.isInitialized) {
+        return const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        );
+      }
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14.r),
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: controller.value.previewSize?.height ?? 240,
+            height: controller.value.previewSize?.width ?? 320,
+            child: CameraPreview(controller),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error building local CameraPreview: $e');
+      return const Center(
+        child: Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+      );
+    }
   }
 
   Future<bool> _confirmEndTrip(BuildContext context) async {
