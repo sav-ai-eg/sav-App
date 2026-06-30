@@ -19,6 +19,9 @@ class CameraService {
   /// Initialize the front camera at medium resolution.
   /// Returns true on success.
   Future<bool> initialize() async {
+    if (_isInitialized && _controller != null && _controller!.value.isInitialized) {
+      return true;
+    }
     try {
       _cameras = await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {

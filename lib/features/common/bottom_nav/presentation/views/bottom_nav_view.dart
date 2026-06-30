@@ -99,6 +99,9 @@ class _BottomNavViewState extends State<BottomNavView> {
                             bottomNavModels: cubit.bottomNavModels,
                             onItemTap: (index) =>
                                 cubit.changeIndex(index: index),
+                            onHomeLongPress: () {
+                              context.read<TripCubit>().toggleAiMode();
+                            },
                           ),
                         ),
                       ),

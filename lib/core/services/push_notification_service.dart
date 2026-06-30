@@ -111,7 +111,10 @@ class PushNotificationService {
     try {
       final token = await _fcm.getToken();
       if (token != null) {
-        debugPrint('FCM fetched token: $token');
+        debugPrint('======================================================');
+        debugPrint('🔑🔑🔑 MY FCM TOKEN (Copy this!): 🔑🔑🔑');
+        debugPrint(token);
+        debugPrint('======================================================');
         await _prefs.setString('${AppConstants.prefSelectedAlertSound}_fcm_token', token);
         await _uploadTokenToBackend(token);
       }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:get_it/get_it.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:injectable/injectable.dart';
@@ -35,6 +36,8 @@ import 'package:sav/features/trip/domain/usecases/stop_trip_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/load_driver_trip_history_use_case.dart';
 import 'package:sav/features/trip/domain/usecases/start_existing_trip_use_case.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:sav/core/services/camera_service.dart';
+import 'package:sav/core/services/tflite_detection_service.dart';
 
 part 'trip_state.dart';
 
@@ -62,6 +65,36 @@ class TripCubit extends Cubit<TripState> {
     _connectivity.onConnectivityLost = _onConnectivityLost;
     _fcmAlertSubscription = PushNotificationService.alertStream.listen(_onFcmAlert);
     _localTelemetrySubscription = _localTelemetryServer.telemetryStream.listen(_onLocalTelemetry);
+  }
+
+  void toggleAiMode() {
+    _useLocalAiMode = !_useLocalAiMode;
+    debugPrint('TripCubit: Toggled AI Mode! useLocalAiMode = $_useLocalAiMode');
+
+    Fluttertoast.showToast(
+      msg: _useLocalAiMode 
+          ? "Switched to Local AI (Mobile Camera)" 
+          : "Switched to ESP-AI (Car Camera)",
+      toastLength: Toast.LENGTH_LONG,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: Colors.black87,
+      textColor: Colors.white,
+    );
+
+    if (_activeTrip != null && _activeTrip!.isStarted) {
+      if (_useLocalAiMode) {
+        unawaited(_startLocalAiLoop());
+      } else {
+        _stopLocalAiLoop();
+        _updateActiveState(
+          detectionStatus: _connectivity.isOnline
+              ? DetectionStatus.safe
+              : DetectionStatus.offline,
+          isAiReady: false,
+          force: true,
+        );
+      }
+    }
   }
 
   final StartTripUseCase _startTripUseCase;
@@ -96,14 +129,21 @@ class TripCubit extends Cubit<TripState> {
       ? GetIt.instance<LoadEspTelemetryStatsUseCase>()
       : null;
 
+  CameraService get _cameraService => GetIt.instance<CameraService>();
+  TfliteDetectionService get _tfliteDetectionService => GetIt.instance<TfliteDetectionService>();
+
   TripEntity? _activeTrip;
   Timer? _telemetryTimer;
   Timer? _telemetryStatsTimer;
   Timer? _locationUpdateTimer;
+  Timer? _localAiTimer;
+  bool _isLocalAiRunning = false;
   StreamSubscription<Map<String, dynamic>>? _fcmAlertSubscription;
   StreamSubscription<Map<String, dynamic>>? _localTelemetrySubscription;
   bool _isPollingTelemetry = false;
   bool _isTransitioning = false;
+  bool _useLocalAiMode = false;
+  bool get useLocalAiMode => _useLocalAiMode;
 
   TripRepository get _tripRepository => GetIt.instance<TripRepository>();
   int? _lastAlertId;
@@ -117,6 +157,8 @@ class TripCubit extends Cubit<TripState> {
   int _drowsinessAlerts = 0;
   int _distractionAlerts = 0;
   double _awakePercentage = 100.0;
+  int _totalFramesCount = 0;
+  int _safeFramesCount = 0;
   double _totalDistanceMeters = 0;
   Position? _lastPosition;
   DateTime? _lastAlertTime;
@@ -437,6 +479,9 @@ class TripCubit extends Cubit<TripState> {
         _startTelemetryLoop();
         _startTelemetryStatsLoop();
         unawaited(_localTelemetryServer.start());
+        if (_useLocalAiMode) {
+          unawaited(_startLocalAiLoop());
+        }
         _tripLiveUpdates?.emit(
           type: TripLiveUpdateType.resumed,
           tripId: updatedTrip.tripIdOrZero,
@@ -525,6 +570,23 @@ class TripCubit extends Cubit<TripState> {
       debugPrint('Trip location init failed: $error');
     }
 
+    // Initialize Camera and AI models during the loading screen for smooth UI transitions
+    if (_useLocalAiMode) {
+      try {
+        _emitLoadingStep('Initializing camera...');
+        final cameraInit = await _cameraService.initialize();
+        
+        _emitLoadingStep('Loading AI models...');
+        final tfliteInit = await _tfliteDetectionService.initialize();
+        
+        if (cameraInit && tfliteInit) {
+          _isTelemetryReady = true;
+        }
+      } catch (e) {
+        debugPrint('Camera/AI init failed in loading screen: $e');
+      }
+    }
+
     if (_activeTrip == null) {
       return;
     }
@@ -558,6 +620,9 @@ class TripCubit extends Cubit<TripState> {
       _startTelemetryLoop();
       _startTelemetryStatsLoop();
       unawaited(_localTelemetryServer.start());
+      if (_useLocalAiMode) {
+        unawaited(_startLocalAiLoop());
+      }
     }
 
     _startLocationTracking();
@@ -577,6 +642,8 @@ class TripCubit extends Cubit<TripState> {
     _drowsinessAlerts = 0;
     _distractionAlerts = 0;
     _awakePercentage = 100.0;
+    _totalFramesCount = 0;
+    _safeFramesCount = 0;
     _totalDistanceMeters = 0;
     _lastPosition = null;
     _lastAlertTime = null;
@@ -721,6 +788,7 @@ class TripCubit extends Cubit<TripState> {
 
     _lastTelemetryId = latest.id;
     _lastTelemetryAt = eventTime ?? DateTime.now();
+    _updateAwakePercentage(!latest.eyeAlert);
 
     if (!latest.hasDanger) {
       _updateActiveState(
@@ -779,6 +847,18 @@ class TripCubit extends Cubit<TripState> {
     final safePercent = (stats.safeCount / stats.total) * 100;
     _awakePercentage = safePercent.clamp(0, 100).toDouble();
     _updateActiveState();
+  }
+
+  void _updateAwakePercentage(bool isSafeFrame) {
+    _totalFramesCount++;
+    if (isSafeFrame) {
+      _safeFramesCount++;
+    }
+    if (_totalFramesCount > 0) {
+      final calcPercent = (_safeFramesCount / _totalFramesCount) * 100;
+      _awakePercentage = calcPercent.clamp(0.0, 100.0).toDouble();
+      _awakePercentage = double.parse(_awakePercentage.toStringAsFixed(1));
+    }
   }
 
   DetectionStatus _resolveTelemetryStatus(EspTelemetryLogEntity latest) {
@@ -1087,9 +1167,11 @@ class TripCubit extends Cubit<TripState> {
     );
 
     final fallbackDistance = _formatDistanceSummary(_totalDistanceMeters);
-    final awake = _lastTelemetryAt != null
+    final awake = _totalFramesCount > 0
       ? _awakePercentage
-      : (trip?.awakePercentage ?? 100.0);
+      : (_lastTelemetryAt != null
+        ? _awakePercentage
+        : (trip?.awakePercentage ?? 100.0));
 
     return TripEnded(
       duration: (trip?.duration ?? '').trim().isNotEmpty
@@ -1117,6 +1199,7 @@ class TripCubit extends Cubit<TripState> {
     _alertService.stop();
     unawaited(_localTelemetryServer.stop());
     unawaited(WakelockPlus.disable());
+    _stopLocalAiLoop();
   }
 
   void resetTrip() {
@@ -1134,8 +1217,13 @@ class TripCubit extends Cubit<TripState> {
     double? latitude,
     double? longitude,
     bool? isActionInProgress,
+    bool force = false,
   }) {
     if (_activeTrip == null) {
+      return;
+    }
+
+    if (!force && state is TripDangerAlert) {
       return;
     }
 
@@ -1176,9 +1264,11 @@ class TripCubit extends Cubit<TripState> {
       alertCount: _alertCount,
       drowsinessAlerts: _drowsinessAlerts,
       distractionAlerts: _distractionAlerts,
-      awakePercentage: _lastTelemetryAt != null
+      awakePercentage: _totalFramesCount > 0
         ? _awakePercentage
-        : (_activeTrip?.awakePercentage ?? 100.0),
+        : (_lastTelemetryAt != null
+          ? _awakePercentage
+          : (_activeTrip?.awakePercentage ?? 100.0)),
       latitude: latitude ?? base?.latitude ?? _activeTrip?.currentLatitude,
       longitude: longitude ?? base?.longitude ?? _activeTrip?.currentLongitude,
       totalDistanceMeters: _totalDistanceMeters,
@@ -1324,6 +1414,9 @@ class TripCubit extends Cubit<TripState> {
 
     final bool faceDetected = data['face_detected'] ?? true;
     final bool eyeAlert = data['eye_alert'] ?? false;
+
+    _lastTelemetryAt = DateTime.now();
+    _updateAwakePercentage(!eyeAlert);
     final bool yawn = data['yawn'] ?? false;
     final bool headDown = data['head_down'] ?? false;
     final bool alert = data['alert'] ?? false;
@@ -1381,11 +1474,13 @@ class TripCubit extends Cubit<TripState> {
         ),
       );
     } else {
-      // Safe state update
-      _updateActiveState(
-        detectionStatus: DetectionStatus.safe,
-        isAiReady: true,
-      );
+      // Safe state update - only if not showing a danger alert currently
+      if (state is! TripDangerAlert) {
+        _updateActiveState(
+          detectionStatus: DetectionStatus.safe,
+          isAiReady: true,
+        );
+      }
     }
   }
 
@@ -1603,7 +1698,80 @@ class TripCubit extends Cubit<TripState> {
             ? DetectionStatus.offline
             : DetectionStatus.safe,
         isAiReady: true,
+        force: true,
       );
     }
+  }
+
+  // ─── Local AI Loop ────────────────────────────────────────────────────────
+
+  Future<void> _startLocalAiLoop() async {
+    if (_isLocalAiRunning) return;
+    _isLocalAiRunning = true;
+
+    try {
+      final cameraInit = await _cameraService.initialize();
+      final tfliteInit = await _tfliteDetectionService.initialize();
+
+      if (!cameraInit || !tfliteInit) {
+        debugPrint('❌ Local AI initialization failed: camera=$cameraInit, tflite=$tfliteInit');
+        _isLocalAiRunning = false;
+        return;
+      }
+
+      debugPrint('🧠 Local AI Loop: Initialized successfully. Starting capture.');
+      _updateActiveState(isAiReady: true);
+
+      _localAiTimer?.cancel();
+      _localAiTimer = Timer.periodic(
+        const Duration(milliseconds: 1500),
+        (_) => _processLocalAiFrame(),
+      );
+    } catch (e) {
+      debugPrint('❌ Local AI Loop startup error: $e');
+      _isLocalAiRunning = false;
+    }
+  }
+
+  Future<void> _processLocalAiFrame() async {
+    if (_activeTrip == null || !_activeTrip!.isStarted) {
+      _stopLocalAiLoop();
+      return;
+    }
+
+    try {
+      final bytes = await _cameraService.captureFrame();
+      if (bytes == null) return;
+
+      final result = await _tfliteDetectionService.detectFrame(bytes);
+      if (result == null) return;
+
+      debugPrint('🧠 Local AI Frame Result: $result');
+
+      // Map detection result to same layout as local telemetry server payload
+      final Map<String, dynamic> localTelemetryData = {
+        'face_detected': true,
+        'eye_alert': result.isDrowsy,
+        'yawn': result.isYawning,
+        'head_down': false, // Local model focuses on eye/yawn
+        'alert': result.isDanger,
+        'score': result.maxConfidence,
+      };
+
+      // Reuse the existing _onLocalTelemetry handler to fire alarms and update UI
+      _onLocalTelemetry(localTelemetryData);
+
+    } catch (e) {
+      debugPrint('❌ Error in local AI frame processing: $e');
+    }
+  }
+
+  void _stopLocalAiLoop() {
+    _localAiTimer?.cancel();
+    _localAiTimer = null;
+    _isLocalAiRunning = false;
+    _cameraService.dispose();
+    _tfliteDetectionService.dispose();
+    debugPrint('🧠 Local AI Loop: Stopped & disposed resources.');
   }
 }

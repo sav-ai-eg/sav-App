@@ -25,6 +25,9 @@ class TfliteDetectionService {
   /// Load both TFLite models from assets.
   /// Returns true if at least one model loaded successfully.
   Future<bool> initialize() async {
+    if (_isInitialized) {
+      return true;
+    }
     try {
       final results = await Future.wait([
         _loadInterpreter(AppConstants.eyeModelAsset),
